@@ -1,0 +1,174 @@
+set_id: zh_v1
+description: >
+  Twenty-five unseen Mandarin test sentences for the character voice benchmark (spec §19).
+  None of these may appear in any training split — the point is generalisation to new
+  lines, not reconstruction of memorised ones.
+
+  The set is built around what actually distinguishes a character voice from a competent
+  generic one. Twenty neutral statements would let every candidate score well and tell us
+  nothing, so the categories deliberately include short interjections (where pacing and
+  vocal texture are all there is), punctuation-heavy hesitation, ending particles, and
+  pronunciation traps. Number, date and Latin-token lines double as an end-to-end check
+  on the Chinese text normalizer: if `2026年3月17日` is read wrongly, the fault is the
+  front-end, not the acoustic model, and the benchmark should make that visible.
+
+sentences:
+  # --- everyday register ---------------------------------------------------------
+  - sentence_id: s01
+    text: 今天外面风有点大，你出门记得多穿一件。
+    category: everyday
+    target_style: neutral
+    probe: "Baseline neutral delivery; the reference point for every other line."
+
+  - sentence_id: s02
+    text: 我刚把东西收拾完，现在有空了。
+    category: everyday
+    target_style: neutral
+    probe: "Flat statement — listen for robotic even pacing."
+
+  - sentence_id: s03
+    text: 别急，慢慢说，我在听。
+    category: everyday
+    target_style: soft
+    probe: "Three short clauses; tests whether pauses are performed or merely inserted."
+
+  # --- emotional range -----------------------------------------------------------
+  - sentence_id: s04
+    text: 哦？这么快就回来了，看来你还挺闲的。
+    category: emotional
+    target_style: teasing
+    probe: "Teasing lift on 哦 and a dry landing; the hardest thing for a generic voice."
+
+  - sentence_id: s05
+    text: 有些事说出来，反而更难受。
+    category: emotional
+    target_style: sad
+    probe: "Low energy without becoming mumbled or losing the character's timbre."
+
+  - sentence_id: s06
+    text: 够了，我不想再听这种借口。
+    category: emotional
+    target_style: angry
+    probe: "Anger with control. Over-driven shouting is a common failure here."
+
+  - sentence_id: s07
+    text: 什么？你居然真的做到了？
+    category: emotional
+    target_style: surprised
+    probe: "Two rising questions in a row; tests intonation variety within one line."
+
+  - sentence_id: s08
+    text: 太好了，我们终于可以出发了！
+    category: emotional
+    target_style: excited
+    probe: "High arousal — does timbre survive, or does the voice become a different person?"
+
+  - sentence_id: s09
+    text: 小声一点，别把他们吵醒了。
+    category: emotional
+    target_style: whisper
+    probe: "Breath and aspiration must survive. Over-denoised training data fails here."
+
+  - sentence_id: s10
+    text: 记住，越过那条线之后，就没有回头路了。
+    category: emotional
+    target_style: serious
+    probe: "Weight and slower pacing without dropping into monotone."
+
+  - sentence_id: s11
+    text: 别装了，我看得出来你在难过。
+    category: emotional
+    target_style: soft
+    probe: "Gentle but direct; tests soft register that is not whisper."
+
+  # --- question and interjection -------------------------------------------------
+  - sentence_id: s12
+    text: 你确定这就是你想要的答案吗？
+    category: question
+    target_style: neutral
+    probe: "Sentence-final 吗 — Mandarin question intonation is subtle and often flattened."
+
+  - sentence_id: s13
+    text: 哼。
+    category: short_interjection
+    target_style: teasing
+    probe: "One syllable. Nothing to hide behind: pure timbre and attitude."
+
+  - sentence_id: s14
+    text: 嗯……好吧。
+    category: short_interjection
+    target_style: soft
+    probe: "Hesitation marker plus ellipsis; tests trailing-off endings."
+
+  # --- structure -----------------------------------------------------------------
+  - sentence_id: s15
+    text: 如果你真的打算一个人过去，那至少把该带的都带上，别等出了事才想起来后悔。
+    category: long_sentence
+    target_style: serious
+    probe: "Long line — breath placement, and whether chunking artefacts appear mid-sentence."
+
+  - sentence_id: s16
+    text: 我……我不是那个意思，只是……算了，当我没说。
+    category: punctuation_heavy
+    target_style: soft
+    probe: "Repetition and two ellipses; the clearest test of pause style."
+
+  # --- text normalization --------------------------------------------------------
+  - sentence_id: s17
+    text: 会议定在2026年3月17日下午两点半，别迟到。
+    category: numbers_and_dates
+    target_style: neutral
+    probe: "Year read digit-by-digit, date and time read as Chinese numerals."
+
+  - sentence_id: s18
+    text: 这批一共1250件，其中37件要单独检查。
+    category: numbers_and_dates
+    target_style: neutral
+    probe: "Cardinal numbers with measure words; 一千二百五十 not 一二五零."
+
+  - sentence_id: s19
+    text: 成功率大概是78.5%，比上次高了20%。
+    category: numbers_and_dates
+    target_style: neutral
+    probe: "Percentages and a decimal — 百分之七十八点五."
+
+  - sentence_id: s20
+    text: 他说他用的是GPT-5.6，还装了CUDA 12.8。
+    category: latin_and_abbreviations
+    target_style: neutral
+    probe: "Latin abbreviations need a configured spoken form; letter-by-letter vs word."
+
+  - sentence_id: s21
+    text: 把那个PDF发到我邮箱，编号是A7-3B。
+    category: latin_and_abbreviations
+    target_style: neutral
+    probe: "Alphanumeric identifier; a frequent source of garbled output."
+
+  # --- pronunciation traps -------------------------------------------------------
+  - sentence_id: s22
+    text: 这件事得重新称一下，那块重物差了不少。
+    category: pronunciation_trap
+    target_style: neutral
+    probe: "重 chóng vs zhòng in one line — polyphone disambiguation (g2pW territory)."
+
+  - sentence_id: s23
+    text: 这一行字不行，还得再调一下调子。
+    category: pronunciation_trap
+    target_style: neutral
+    probe: "行 háng/xíng and 调 tiáo/diào; classic Mandarin front-end failures."
+
+  # --- character signature -------------------------------------------------------
+  # Replace these two with real signature lines for the character under test. They are
+  # the most diagnostic items in the set — a line the character is known for is where a
+  # listener who knows her will notice a wrong reading instantly.
+  - sentence_id: s24
+    text: 这种事，我一个人就够了。
+    category: character_signature
+    target_style: serious
+    probe: "PLACEHOLDER — substitute a signature line for the character being tested."
+
+  - sentence_id: s25
+    text: 早就说过了吧，你总是不听。
+    category: character_signature
+    target_style: teasing
+    probe: "PLACEHOLDER — substitute a signature line for the character being tested."

@@ -1,0 +1,111 @@
+# Application configuration.
+#
+# Layering: this file, then CVAI__section__key environment variables, then any
+# --set overrides on the command line. ${VAR} and ${VAR:-default} are expanded at
+# load time, so secrets stay out of the repository.
+
+default_character: denia_cn
+log_level: INFO
+
+paths:
+  voicepacks: voicepacks
+  characters: characters/profiles
+  runs: runs
+  models: models
+
+benchmark:
+  base_seed: 20260921
+  # null = each engine's native rate. Resampling everything to a common rate is
+  # tempting for fairness but throws away the 48 kHz output that v4-class engines
+  # produce, which is part of what is being judged.
+  output_sample_rate: null
+  repeats: 1
+  skip_unavailable: true
+
+providers:
+  tts:
+    # Until Milestone 7 picks a winner, the default is the dependency-free mock so
+    # the pipeline runs anywhere. The benchmark addresses engines by instance name
+    # regardless of this setting.
+    active: mock
+    instances:
+      mock:
+        type: mock
+        options:
+          sample_rate: 24000
+
+      # --- spec-mandated candidates ------------------------------------------
+      gpt_sovits:
+        type: gpt_sovits
+        enabled: true
+        options:
+          base_url: ${GPT_SOVITS_URL:-http://127.0.0.1:9880}
+          engine_version: v4
+          # Defaults mirror api_v2.py; override per candidate in the benchmark.
+          top_k: 15
+          top_p: 1.0
+          temperature: 1.0
+          text_split_method: cut5
+          speed_factor: 1.0
+          repetition_penalty: 1.35
+          sample_steps: 32
+          native_sample_rate: 48000
+
+      qwen3_tts:
+        type: qwen3_tts
+        enabled: true
+        options:
+          base_url: ${QWEN3_TTS_URL:-http://127.0.0.1:9881}
+          engine_version: Qwen3-TTS-12Hz-1.7B-Base
+          auto_instruct: true
+
+      fish_speech:
+        type: fish_speech
+        enabled: true
+        options:
+          base_url: ${FISH_SPEECH_URL:-http://127.0.0.1:8888}
+          engine_version: openaudio-s1-mini
+          require_precomputed_tokens: true
+
+      # --- optional candidates added after the technology survey --------------
+      index_tts:
+        type: index_tts
+        enabled: true
+        options:
+          base_url: ${INDEX_TTS_URL:-http://127.0.0.1:9882}
+          engine_version: IndexTTS-2.5
+          emo_alpha: 0.8
+
+      cosyvoice:
+        type: cosyvoice
+        enabled: true
+        options:
+          base_url: ${COSYVOICE_URL:-http://127.0.0.1:9883}
+          engine_version: Fun-CosyVoice3-0.5B
+
+      voxcpm:
+        type: voxcpm
+        enabled: true
+        options:
+          base_url: ${VOXCPM_URL:-http://127.0.0.1:9884}
+          engine_version: VoxCPM2
+
+  stt:
+    active: openai
+    instances:
+      openai:
+        type: openai
+        options:
+          model: gpt-4o-transcribe
+          api_key: ${OPENAI_API_KEY:-}
+
+  llm:
+    active: openai
+    instances:
+      openai:
+        type: openai
+        options:
+          model: gpt-4o
+          api_key: ${OPENAI_API_KEY:-}
+          temperature: 0.8
+          max_output_tokens: 400

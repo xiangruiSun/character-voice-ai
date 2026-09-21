@@ -1,0 +1,92 @@
+voicepack_id: denia_cn
+version: 0.1.0
+character_id: denia_cn
+display_name: 迪尼娅 (Denia)
+language: zh-CN
+
+source:
+  description: TODO — 原始音频来源说明
+  game_or_media: TODO
+  extraction_tool: TODO (e.g. AnimeWwise / vgmstream / AssetStudio)
+  license_note: >
+    TODO — 在训练之前记录使用权检查结果。这一条不是法律意见，而是要求有人在动手前
+    确认过，并把结论写下来。
+  consent_confirmed: false
+
+# Target format for everything under clean/. 44.1 kHz keeps headroom for engines that
+# output 48 kHz natively (GPT-SoVITS v4, VoxCPM2) without upsampling anything.
+target_sample_rate: 44100
+target_lufs: -20.0
+
+# Optional waveform-altering stages, all off by default (decision D7). Turn one on only
+# after listening to what it does to this specific voice, and keep a null-processing
+# control set either way.
+enable_source_separation: false
+enable_dereverb: false
+enable_denoise: false
+
+# Styles this pack is expected to perform. The core ten (spec §9) plus character-specific
+# tags, each declaring the core style it falls back to when it has no clips of its own.
+styles:
+  - name: neutral
+    core_style: neutral
+    description: 平常语气，叙述与回答
+  - name: soft
+    core_style: soft
+    description: 放低声音，语速略慢
+  - name: happy
+    core_style: happy
+  - name: sad
+    core_style: sad
+  - name: angry
+    core_style: angry
+  - name: teasing
+    core_style: teasing
+  - name: serious
+    core_style: serious
+  - name: surprised
+    core_style: surprised
+  - name: whisper
+    core_style: whisper
+    description: 气声，几乎不用声带；剪辑时务必保留呼吸声
+  - name: excited
+    core_style: excited
+
+  # Character-specific styles (spec §9: these become more useful than generic labels
+  # once there is enough data). Add clips for them in Milestone 2; until then the
+  # retriever falls back along core_style.
+  - name: soft_teasing
+    core_style: teasing
+    description: 轻声调侃，句尾下沉而不上扬
+    typical_speaking_rate: slightly_slow
+    typical_pitch_profile: mid
+    instruct: 轻声调侃的语气，语速略慢，句尾下沉
+  - name: embarrassed
+    core_style: soft
+    description: 掩饰性的解释，语速略快，尾音发虚
+    typical_speaking_rate: slightly_fast
+    typical_pitch_profile: mid_high
+    instruct: 略带窘迫的语气，语速略快，尾音发虚
+  - name: cold
+    core_style: serious
+    description: 疏离、克制，音量偏低，几乎没有起伏
+    typical_speaking_rate: normal
+    typical_pitch_profile: mid_low
+    instruct: 冷淡克制的语气，起伏很小
+  - name: gentle
+    core_style: soft
+    description: 关心但不外露
+    typical_speaking_rate: slightly_slow
+    typical_pitch_profile: mid
+  - name: playful
+    core_style: happy
+    description: 有活力的玩笑，比 teasing 更外放
+    typical_speaking_rate: slightly_fast
+    typical_pitch_profile: mid_high
+
+checkpoints: []
+
+notes: >
+  Empty pack, scaffolded in Milestone 1. Milestone 2 fills raw/ → clean/ → references/
+  → datasets/. Run `cvai-voicepack validate denia_cn` at any point; it reports what is
+  still missing and will not let the benchmark start on a pack that cannot support it.

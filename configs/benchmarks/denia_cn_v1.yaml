@@ -1,0 +1,116 @@
+# The Milestone 6/7 benchmark: which adaptation approach reproduces this character best?
+#
+# Candidates are (engine, adaptation_mode) pairs, never bare engines — a fine-tuned
+# engine and a zero-shot one are different things and must be reported as different rows
+# (decision D4). Zero-shot rows for the fine-tunable engines are kept on purpose: the
+# zero-shot/fine-tuned delta for the *same* engine is the cleanest available evidence for
+# the project's core claim that character adaptation beats speaker embedding.
+#
+# Checkpoint ids are filled in by Milestones 3-5. Candidates that need one are disabled
+# until it exists, because a candidate with a missing checkpoint would otherwise be
+# silently skipped and quietly absent from the comparison.
+
+benchmark_id: denia_cn_v1
+description: >
+  Primary engine selection for the denia_cn voice pack. Same sentence set, same reference
+  bank, same seeds for every candidate.
+voicepack_id: denia_cn
+voicepack_version: null   # pin once the pack is frozen for the experiment
+sentence_set: configs/benchmarks/sentences_zh_v1.yaml
+
+repeats: 2          # exposes run-to-run instability; a model that mangles 1 line in 20
+                    # is worse in production than a steadier, slightly duller one
+base_seed: 20260921
+output_sample_rate: null
+skip_unavailable: true
+rotate_references: true
+
+ground_truth:
+  enabled: true
+  source: heldout
+  max_items: 8
+
+candidates:
+  # --- GPT-SoVITS -----------------------------------------------------------------
+  - candidate_id: gpt_sovits_v4_zs
+    engine: gpt_sovits
+    adaptation_mode: zero_shot
+    display_name: GPT-SoVITS v4 (zero-shot)
+    license: MIT
+    commercial_use: true
+    notes: Baseline for the fine-tuned row below.
+
+  - candidate_id: gpt_sovits_v4_ft
+    engine: gpt_sovits
+    adaptation_mode: finetuned
+    display_name: GPT-SoVITS v4 (fine-tuned)
+    checkpoint_id: null       # "<gpt_weights>|<sovits_weights>" — set in Milestone 3
+    enabled: false
+    license: MIT
+    commercial_use: true
+    notes: >
+      v4 for 48 kHz output and the best reported timbre similarity. If the source audio
+      turns out rough, run v2Pro as an extra candidate rather than switching outright.
+
+  # --- Qwen3-TTS ------------------------------------------------------------------
+  - candidate_id: qwen3_1b7_zs
+    engine: qwen3_tts
+    adaptation_mode: zero_shot
+    display_name: Qwen3-TTS 1.7B (zero-shot)
+    license: Apache-2.0
+    commercial_use: true
+
+  - candidate_id: qwen3_1b7_ft
+    engine: qwen3_tts
+    adaptation_mode: lora
+    display_name: Qwen3-TTS 1.7B (LoRA)
+    checkpoint_id: null       # set in Milestone 4
+    enabled: false
+    license: Apache-2.0
+    commercial_use: true
+
+  # --- Fish Speech ----------------------------------------------------------------
+  - candidate_id: fish_s1_zs
+    engine: fish_speech
+    adaptation_mode: zero_shot
+    display_name: Fish Speech S1-mini (zero-shot)
+    license: verify weights licence before use
+    commercial_use: null
+
+  - candidate_id: fish_s1_lora
+    engine: fish_speech
+    adaptation_mode: lora
+    display_name: Fish Speech S1-mini (LoRA)
+    checkpoint_id: null       # set in Milestone 5
+    enabled: false
+    license: verify weights licence before use
+    commercial_use: null
+    notes: Upstream advises against fine-tuning an RL-trained checkpoint.
+
+  # --- optional candidates from the technology survey -----------------------------
+  - candidate_id: index_tts_25_zs
+    engine: index_tts
+    adaptation_mode: zero_shot
+    display_name: IndexTTS-2.5 (zero-shot, emotion vectors)
+    license: bilibili Model Use License (not OSI)
+    commercial_use: null
+    notes: >
+      The only candidate with emotion control decoupled from speaker identity. No
+      fine-tuning path, so it competes zero-shot only. Licence must be read before it
+      can be selected.
+
+  - candidate_id: cosyvoice3_zs
+    engine: cosyvoice
+    adaptation_mode: zero_shot
+    display_name: Fun-CosyVoice3 0.5B (zero-shot)
+    license: Apache-2.0
+    commercial_use: true
+    notes: Strongest streaming story (~150 ms bidirectional) — matters for Milestone 12.
+
+  - candidate_id: voxcpm2_zs
+    engine: voxcpm
+    adaptation_mode: zero_shot
+    display_name: VoxCPM2 (zero-shot)
+    license: Apache-2.0
+    commercial_use: true
+    notes: 48 kHz native; LoRA from 5-10 min, the fallback if the pack comes in small.

@@ -1,0 +1,47 @@
+# End-to-end smoke test of the benchmark pipeline with no GPU and no model weights.
+#
+# Three "candidates" are the same mock engine configured differently, which is enough to
+# exercise everything the real benchmark does: per-candidate audio directories, shared
+# seeds, reference rotation, blind shuffling, key separation, aggregation and reporting.
+# `make demo` runs this.
+
+benchmark_id: demo_mock
+description: Pipeline smoke test using the dependency-free mock engine.
+voicepack_id: demo_zh
+sentence_set: configs/benchmarks/sentences_zh_v1.yaml
+
+repeats: 1
+base_seed: 4242
+skip_unavailable: false
+rotate_references: true
+
+ground_truth:
+  enabled: true
+  source: heldout
+  max_items: 4
+
+candidates:
+  - candidate_id: mock_a
+    engine: mock
+    adaptation_mode: zero_shot
+    display_name: Mock A (baseline)
+    license: MIT
+    commercial_use: true
+
+  - candidate_id: mock_b
+    engine: mock
+    adaptation_mode: zero_shot
+    display_name: Mock B (brighter)
+    license: MIT
+    commercial_use: true
+    engine_params:
+      timbre_note: brighter
+
+  - candidate_id: mock_c
+    engine: mock
+    adaptation_mode: zero_shot
+    display_name: Mock C (darker)
+    license: MIT
+    commercial_use: true
+    engine_params:
+      timbre_note: darker

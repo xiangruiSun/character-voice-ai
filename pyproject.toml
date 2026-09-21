@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "character-voice-ai"
+version = "0.1.0"
+description = "Chinese character voice AI: character-specific voice reproduction, not generic TTS"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+# Milestone 1 runs on this set alone: no torch, no CUDA, no model weights.
+dependencies = [
+    "pydantic>=2.6",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# Milestone 2 — Voice Pack preprocessing. Installed into its own environment.
+preprocess = [
+    "numpy>=1.26",
+    "soundfile>=0.12",
+    "librosa>=0.10",
+    "pyloudnorm>=0.1.1",
+    "funasr>=1.1",           # paraformer-zh + fsmn-vad + ct-punc + cam++
+    "modelscope>=1.15",
+    "audio-separator>=0.24",  # UVR model zoo (BS-Roformer, MDX-Net, VR, Demucs)
+]
+# Milestone 8 — Chinese text front-end.
+textfrontend = [
+    "cn2an>=0.5.22",
+    "pypinyin>=0.51",
+    "wetext>=0.0.4",          # pynini-free runtime for WeTextProcessing rules
+]
+# Milestones 9-13 — runtime application.
+runtime = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "httpx>=0.27",
+    "openai>=1.30",
+    "websockets>=12.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+cvai-voicepack = "cvai_core.cli.voicepack_cli:main"
+cvai-bench = "cvai_evaluation.cli:main"
+
+[tool.setuptools.packages.find]
+# One distribution, many source roots — keeps the spec's folder separation (§22)
+# while staying a single `pip install -e .`.
+where = [
+    "packages/shared_types",
+    "packages/audio_protocol",
+    "services/core",
+    "services/evaluation",
+    "services/reference_retrieval",
+    "services/voice_preprocessing",
+    "services/text_normalizer",
+    "services/speech_planner",
+    "services/conversation",
+    "providers/tts",
+    "providers/stt",
+    "providers/llm",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [
+    "packages/shared_types",
+    "packages/audio_protocol",
+    "services/core",
+    "services/evaluation",
+    "services/reference_retrieval",
+    "services/voice_preprocessing",
+    "services/text_normalizer",
+    "services/speech_planner",
+    "services/conversation",
+    "providers/tts",
+    "providers/stt",
+    "providers/llm",
+]
+filterwarnings = ["error::DeprecationWarning"]

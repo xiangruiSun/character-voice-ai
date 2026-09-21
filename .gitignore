@@ -1,0 +1,54 @@
+# Benchmark output: large, regenerable, and specific to one machine's run.
+runs/
+
+# Voice pack contents are data, not source. The manifest, README and directory skeleton
+# are tracked; audio, datasets and checkpoints are not — they are large, often
+# licence-encumbered, and reproducible from raw/ plus the recorded processing chain.
+voicepacks/*/raw/**
+voicepacks/*/processed/**
+voicepacks/*/clean/**
+voicepacks/*/rejected/**
+voicepacks/*/references/**
+voicepacks/*/datasets/**
+voicepacks/*/checkpoints/**
+voicepacks/*/evaluation/**
+voicepacks/*/transcripts/**
+voicepacks/*/metadata/dataset.json
+voicepacks/*/metadata/references.json
+!voicepacks/*/**/.gitkeep
+
+# Generated wholly by cvai_evaluation.demo_pack.
+voicepacks/demo_zh/
+
+# Vendored engine checkouts (added as submodules or pinned clones in Milestones 3-5).
+models/*/src/
+third_party/*/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node (apps/web, Milestone 9)
+node_modules/
+.next/
+out/
+
+# Secrets never belong in the repo; configs reference ${VARS} instead.
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
