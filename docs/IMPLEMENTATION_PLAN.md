@@ -147,13 +147,35 @@ webMUSHRA config exporter. Inter-rater agreement reported.
 A written decision record in `docs/decisions/` naming the winner, the runner-up, the
 licence check, the measured numbers, and the conditions that would reverse the decision.
 
-## Milestone 8 — Character Brain + Speech Planner + text normalization
+## Milestone 8 — Character Brain + Speech Planner + text normalization ✅
 
-`CharacterProfile` loading into a system prompt with retrieved original dialogue examples;
-the planner emits the structured `CharacterSpeechPlan` (text + emotion + intensity + rate +
-volume + pause + ending + reference_style) via constrained JSON; the Chinese normalizer
-wraps WeTextProcessing/`wetext` + `cn2an` + `pypinyin`/`g2pW` with a per-character override
-lexicon on top.
+**Character Brain / Speech Planner** (`cvai_speech_planner`): the system prompt is built
+from the `CharacterProfile` — personality, lore, speaking habits, forbidden behaviour and
+retrieved original dialogue examples — in Chinese, because a Chinese character described
+in English drifts toward translationese. The planner asks for a `CharacterSpeechPlan`
+three ways in order of preference: constrained JSON, parse-and-repair from a code fence,
+and finally plain text with the character's default register. A conversation turn never
+fails over formatting, and which path ran is recorded, because a planner silently living
+on the third path is one whose provider needs changing.
+
+Guards then make the plan performable: a style the voice pack does not have is mapped to
+one it does, an over-long reply is cut at a sentence boundary rather than mid-clause,
+bracketed narration is stripped, and a reply that breaks character is flagged. Repairs are
+counted rather than applied silently — a planner rewriting a quarter of its own output has
+a prompt problem.
+
+**Chinese text front-end** (`cvai_text_normalizer`): numbers, dates, times, percentages,
+currency, temperatures, fractions, ordinals, phone numbers, Latin acronyms, product
+versions and alphanumeric codes, punctuation, emoji and markdown, plus the per-character
+pronunciation lexicon. `wetext` and `cn2an` are used when installed; the built-in rules
+run either way, as the whole implementation on a bare install and as a safety net after a
+library pass. Both paths are covered by tests, so behaviour does not depend on what
+happens to be installed.
+
+Also here, early, because it is pure text and testable: the **speech chunker** (spec §14,
+nominally Milestone 12). Cuts on Chinese sentence endings, merges pieces too short to be
+worth a separate request, uses comma-level boundaries only past the preferred length, and
+never strands a conjunction at the start of a chunk.
 
 ## Milestone 9 — Text chat application
 

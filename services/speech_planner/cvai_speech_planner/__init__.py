@@ -1,39 +1,52 @@
-"""Character Speech Planner — Milestone 8.
+"""Character Brain and Speech Planner (Milestone 8, spec §11 and §12).
 
-The component that turns "what she says" into "how she says it" (spec §12). It is not
-implemented yet, on purpose: the planner's output schema
-(:class:`cvai_types.speech_plan.CharacterSpeechPlan`) and the neutral control payload it
-produces (:class:`cvai_types.style.StyleControls`) already exist and are already consumed
-by the TTS adapters, so the planner can be added without changing anything downstream.
+Two halves of "what she says and how she says it":
 
-What Milestone 8 adds here:
+* :mod:`~cvai_speech_planner.prompt` builds the system prompt from a
+  :class:`CharacterProfile` — personality, lore, speaking habits, forbidden behaviour,
+  and the original dialogue examples that actually carry the voice.
+* :mod:`~cvai_speech_planner.planner` asks the LLM for a
+  :class:`~cvai_types.speech_plan.CharacterSpeechPlan` — the line plus its delivery —
+  and :mod:`~cvai_speech_planner.guards` makes sure what comes back is something the
+  character's voice pack can actually perform.
 
-* ``prompt.py`` — assemble the system prompt from a :class:`CharacterProfile`: personality,
-  lore, speaking habits, forbidden behaviour, plus dialogue examples retrieved for the
-  current turn.
-* ``planner.py`` — call ``LLMProvider.complete_structured`` with the JSON schema of
-  ``CharacterSpeechPlan`` and validate the result; fall back to parse-and-repair for
-  providers that cannot constrain output.
-* ``guards.py`` — reject plans that ask for a style the character's voice pack cannot
-  perform, or that exceed ``llm.max_chars_per_reply``.
-
-The schema is available today for anyone who wants to see the contract:
-
-    from cvai_types import CharacterSpeechPlan
-    CharacterSpeechPlan.model_json_schema()
+No LLM fine-tuning (spec §11): prompting and retrieval only in V1.
 """
 
 from __future__ import annotations
 
 from cvai_types import CharacterSpeechPlan
 
+from .guards import BREAKING_CHARACTER, GuardReport, apply_guards
+from .planner import (
+    FALLBACK,
+    PARSED,
+    STRUCTURED,
+    CharacterSpeechPlanner,
+    PlanResult,
+    plan_to_messages,
+)
+from .prompt import UNIVERSAL_RULES, build_messages, render_system_prompt, trim_history
+
 
 def speech_plan_json_schema() -> dict:
-    """The JSON schema the planner will constrain the LLM to (spec §12).
-
-    Exposed now so the prompt work and the schema cannot drift apart later.
-    """
+    """The schema the planner constrains the LLM to (spec §12)."""
     return CharacterSpeechPlan.model_json_schema()
 
 
-__all__ = ["speech_plan_json_schema"]
+__all__ = [
+    "BREAKING_CHARACTER",
+    "CharacterSpeechPlanner",
+    "FALLBACK",
+    "GuardReport",
+    "PARSED",
+    "PlanResult",
+    "STRUCTURED",
+    "UNIVERSAL_RULES",
+    "apply_guards",
+    "build_messages",
+    "plan_to_messages",
+    "render_system_prompt",
+    "speech_plan_json_schema",
+    "trim_history",
+]
