@@ -1,0 +1,10 @@
+# VoxCPM2 sidecar (Milestone 5d). Apache-2.0, 48 kHz native, LoRA from 5-10 minutes.
+# The only candidate that also runs on CPU/MPS, so it can be smoke-tested without a GPU.
+FROM cvai-sidecar-base:latest
+
+RUN pip3 install --no-cache-dir -U voxcpm
+
+ENV CVAI_SIDECAR_ENGINE=voxcpm \
+    CVAI_SIDECAR_MODEL=openbmb/VoxCPM2 \
+    PORT=9884
+CMD ["python3", "-m", "cvai_sidecar.server", "--port", "9884"]

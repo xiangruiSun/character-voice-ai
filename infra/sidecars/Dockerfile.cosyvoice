@@ -1,0 +1,14 @@
+# Fun-CosyVoice3 sidecar (Milestone 5c). Apache-2.0, native bidirectional streaming.
+FROM cvai-sidecar-base:latest
+
+ARG COSYVOICE_REF=main
+RUN git clone --depth 1 --recursive --branch ${COSYVOICE_REF} \
+        https://github.com/QwenAudio/CosyVoice.git /opt/CosyVoice \
+    && pip3 install --no-cache-dir -r /opt/CosyVoice/requirements.txt
+
+ENV PYTHONPATH=/opt/CosyVoice:/opt/CosyVoice/third_party/Matcha-TTS \
+    CVAI_SIDECAR_ENGINE=cosyvoice \
+    CVAI_SIDECAR_MODEL=Fun-CosyVoice3-0.5B \
+    PORT=9883
+VOLUME ["/opt/CosyVoice/pretrained_models"]
+CMD ["python3", "-m", "cvai_sidecar.server", "--port", "9883"]

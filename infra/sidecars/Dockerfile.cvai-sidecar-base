@@ -1,0 +1,30 @@
+# Shared base for the CVAI sidecars (Qwen3-TTS, IndexTTS, CosyVoice, VoxCPM).
+#
+# Each engine still gets its own image — decision D1, they pin incompatible torch and
+# CUDA versions — but they share this layer so the protocol code is identical across
+# them and a protocol fix is one rebuild rather than four edits.
+ARG CUDA_IMAGE=nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
+FROM ${CUDA_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/models/.hf
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv git ffmpeg libsndfile1 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir "fastapi>=0.110" "uvicorn[standard]>=0.29"
+
+# Only the sidecar package is copied, not the whole repository: the sidecar must not be
+# able to reach voice packs, configs or run directories.
+WORKDIR /app
+COPY services/sidecar/cvai_sidecar /app/cvai_sidecar
+
+ENV CVAI_SIDECAR_DEVICE=cuda
+EXPOSE 9881
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-9881}/health" || exit 1
+
+CMD ["python3", "-m", "cvai_sidecar.server"]

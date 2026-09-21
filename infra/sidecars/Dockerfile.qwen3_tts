@@ -1,0 +1,13 @@
+# Qwen3-TTS sidecar (Milestone 4). Apache-2.0 weights, official fine-tuning support.
+FROM cvai-sidecar-base:latest
+
+RUN pip3 install --no-cache-dir -U qwen-tts
+# FlashAttention 2 is optional and cuts memory noticeably; it is a slow build, so it is
+# a separate layer that can be commented out without invalidating the rest.
+RUN pip3 install --no-cache-dir flash-attn --no-build-isolation || \
+    echo "flash-attn unavailable; continuing without it"
+
+ENV CVAI_SIDECAR_ENGINE=qwen3_tts \
+    CVAI_SIDECAR_MODEL=Qwen/Qwen3-TTS-12Hz-1.7B-Base \
+    PORT=9881
+CMD ["python3", "-m", "cvai_sidecar.server", "--port", "9881"]

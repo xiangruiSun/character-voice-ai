@@ -21,6 +21,8 @@ _SOURCE_ROOTS = [
     "services/evaluation",
     "services/reference_retrieval",
     "services/voice_preprocessing",
+    "services/voice_training",
+    "services/sidecar",
     "services/text_normalizer",
     "services/speech_planner",
     "services/conversation",
@@ -45,6 +47,20 @@ def demo_pack(tmp_path: Path):
     from cvai_evaluation.demo_pack import build_demo_voicepack
 
     return build_demo_voicepack(tmp_path / "voicepacks" / "demo_zh")
+
+
+@pytest.fixture(scope="session")
+def shared_demo_pack(tmp_path_factory):
+    """One synthetic pack for the whole session.
+
+    Building it writes a few dozen WAV files, which is slow to repeat per test. Use
+    this only where the test *reads* the pack; anything that mutates it wants the
+    function-scoped `demo_pack`.
+    """
+    from cvai_evaluation.demo_pack import build_demo_voicepack
+
+    root = tmp_path_factory.mktemp("shared-pack") / "voicepacks" / "demo_zh"
+    return build_demo_voicepack(root)
 
 
 @pytest.fixture

@@ -1,0 +1,19 @@
+# IndexTTS-2.5 sidecar (Milestone 5b). Emotion vectors decoupled from speaker identity.
+#
+# LICENCE: bilibili Model Use License, not an OSI licence. Read it before this engine
+# can be selected in Milestone 7 — the benchmark carries commercial_use=null for it.
+FROM cvai-sidecar-base:latest
+
+ARG INDEX_TTS_REF=main
+RUN git clone --depth 1 --branch ${INDEX_TTS_REF} \
+        https://github.com/index-tts/index-tts.git /opt/index-tts \
+    && pip3 install --no-cache-dir -e /opt/index-tts
+
+# Weights are mounted, not baked: they are large and their licence is not ours to
+# redistribute inside an image.
+VOLUME ["/models/index-tts"]
+
+ENV CVAI_SIDECAR_ENGINE=index_tts \
+    CVAI_SIDECAR_MODEL=IndexTTS-2.5 \
+    PORT=9882
+CMD ["python3", "-m", "cvai_sidecar.server", "--port", "9882"]

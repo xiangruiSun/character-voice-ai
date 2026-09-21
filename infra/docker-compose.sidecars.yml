@@ -1,0 +1,90 @@
+# Engine sidecars for the benchmark (Milestones 3-5).
+#
+# Nothing here is required to run Milestones 1-2 — those work with no GPU at all. Bring
+# up only the engines you are benchmarking right now; six models loaded at once will not
+# fit on one card, and the benchmark skips whatever is not answering rather than failing.
+#
+#   docker build -t cvai-sidecar-base:latest -f infra/sidecars/Dockerfile.cvai-sidecar-base .
+#   docker compose -f infra/docker-compose.sidecars.yml up qwen3_tts
+#
+# Every service mounts the voice packs **read-only**. A synthesis sidecar has no reason
+# to write into a pack, and making that impossible is cheaper than trusting it.
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+
+x-common: &common
+  restart: unless-stopped
+  volumes:
+    - ../voicepacks:/voicepacks:ro
+    - ${CVAI_MODEL_CACHE:-../models/.cache}:/models
+  environment:
+    CVAI_SIDECAR_DEVICE: cuda
+
+services:
+  # --- spec-mandated candidates ---------------------------------------------------
+
+  gpt_sovits:
+    # Runs its own api_v2 server; our adapter speaks that directly rather than
+    # wrapping it (docs/SIDECAR_PROTOCOL.md, section A).
+    image: ${GPT_SOVITS_IMAGE:-breakstring/gpt-sovits:latest}
+    <<: [*common, *gpu]
+    ports: ["9880:9880"]
+    volumes:
+      - ../voicepacks:/voicepacks:ro
+      - ${GPT_SOVITS_ROOT:-../models/gpt_sovits/src}:/workspace/GPT-SoVITS
+      - ${CVAI_MODEL_CACHE:-../models/.cache}:/models
+    command: ["python", "api_v2.py", "-a", "0.0.0.0", "-p", "9880"]
+
+  qwen3_tts:
+    build:
+      context: ..
+      dockerfile: infra/sidecars/Dockerfile.qwen3_tts
+    <<: [*common, *gpu]
+    ports: ["9881:9881"]
+    environment:
+      CVAI_SIDECAR_DEVICE: cuda
+      CVAI_SIDECAR_MODEL: ${QWEN3_TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-Base}
+
+  fish_speech:
+    # Also runs its own API server. Prompt tokens for the whole Reference Bank are
+    # pre-extracted at pack build time, so this only ever does inference.
+    image: ${FISH_SPEECH_IMAGE:-fishaudio/fish-speech:latest}
+    <<: [*common, *gpu]
+    ports: ["8888:8888"]
+    command: ["python", "tools/api_server.py", "--listen", "0.0.0.0:8888", "--compile"]
+
+  # --- optional candidates added after the technology survey -----------------------
+
+  index_tts:
+    build:
+      context: ..
+      dockerfile: infra/sidecars/Dockerfile.index_tts
+    <<: [*common, *gpu]
+    ports: ["9882:9882"]
+    volumes:
+      - ../voicepacks:/voicepacks:ro
+      - ${INDEX_TTS_WEIGHTS:-../models/index_tts/checkpoints}:/models/index-tts:ro
+
+  cosyvoice:
+    build:
+      context: ..
+      dockerfile: infra/sidecars/Dockerfile.cosyvoice
+    <<: [*common, *gpu]
+    ports: ["9883:9883"]
+    volumes:
+      - ../voicepacks:/voicepacks:ro
+      - ${COSYVOICE_WEIGHTS:-../models/cosyvoice/pretrained_models}:/opt/CosyVoice/pretrained_models
+
+  voxcpm:
+    build:
+      context: ..
+      dockerfile: infra/sidecars/Dockerfile.voxcpm
+    <<: [*common, *gpu]
+    ports: ["9884:9884"]
