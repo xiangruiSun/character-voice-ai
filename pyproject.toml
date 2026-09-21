@@ -26,6 +26,7 @@ preprocess = [
     "funasr>=1.1",           # paraformer-zh + fsmn-vad + ct-punc + cam++
     "modelscope>=1.15",
     "audio-separator>=0.24",  # UVR model zoo (BS-Roformer, MDX-Net, VR, Demucs)
+    "silero-vad>=5.1",        # better segmentation than the built-in energy gate
 ]
 # Milestone 8 — Chinese text front-end.
 textfrontend = [
@@ -49,6 +50,7 @@ dev = [
 [project.scripts]
 cvai-voicepack = "cvai_core.cli.voicepack_cli:main"
 cvai-bench = "cvai_evaluation.cli:main"
+cvai-prep = "cvai_voice_preprocessing.cli:main"
 
 [tool.setuptools.packages.find]
 # One distribution, many source roots — keeps the spec's folder separation (§22)

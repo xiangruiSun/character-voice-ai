@@ -51,6 +51,35 @@ all emotions", arrived at by accident. The validator warns at one and errors at 
 
 ---
 
+## Running it
+
+```bash
+cvai-prep backends                                  # what is actually installed
+cvai-voicepack init denia_cn --display-name "迪尼娅"
+cvai-prep run denia_cn --source ~/denia_voice_lines --hotword 迪尼娅
+cvai-prep status denia_cn
+cvai-prep review denia_cn                           # writes processed/review.html
+# … listen, correct transcripts, set styles, approve/reject, export the patch …
+cvai-prep apply denia_cn review-patch.json
+cvai-prep anchors denia_cn add <confirmed_segment_ids…>
+cvai-prep run denia_cn --stages speaker_filter      # rescore against the real centroid
+cvai-prep build denia_cn                            # clean/ + dataset + reference bank
+```
+
+Stages are **resumable** — state lives in `processed/state.json` and a re-run picks up
+where the last one stopped. Human corrections are marked `human_edited` and are never
+overwritten by a later automatic pass, so `cvai-prep run` after a review round is safe.
+
+Useful flags: `--limit N` for a trial pass over a big dump before committing hours of
+ASR; `--no-segment` when the source is already one line per file (common for game voice
+exports); `--separate` / `--denoise` to turn on the optional cleaning stages;
+`--auto-approve` to skip human review, which you should read rule 4 below before using.
+
+`cvai-prep backends` reports which implementation each stage resolved to. Without the
+`preprocess` extra, segmentation and all the acoustic measurements still work (they are
+built in), but transcription falls back to a **stub** that writes visible placeholder
+text — and `cvai-prep build` refuses to ship a dataset containing it.
+
 ## The pipeline (Milestone 2)
 
 ```
@@ -72,6 +101,26 @@ raw audio
 
 Tool choices and why, with sources: `docs/TECH_LANDSCAPE.md`. Install the stack with
 `make install-preprocess`.
+
+### What runs without any of that installed
+
+Segmentation and every acoustic measurement are implemented in the repository and need
+no model, no GPU and no download:
+
+| Measurement | How |
+|---|---|
+| Voice activity | adaptive energy gate — threshold from the clip's own noise floor, so one file being studio-clean and the next being reverberant does not need two configs |
+| Pitch (F0 mean / spread) | normalized autocorrelation on a decimated signal |
+| Speaking rate | CJK characters per second |
+| Internal pauses | VAD run at a tighter silence threshold |
+| SNR | speech-frame vs non-speech-frame energy |
+| Clipping | fraction of samples at full scale |
+| Loudness | `pyloudnorm` (BS.1770-4) when installed, RMS approximation otherwise — the record says which |
+| Speaker similarity | spectral band energies + pitch statistics, cosine against the character centroid; **advisory only**, and never used to auto-reject |
+
+Transcription and emotion classification genuinely need models. Rather than fake them,
+the pipeline falls back to a stub that labels itself, and the dataset builder blocks on
+it.
 
 ### Notes that matter more than they look
 

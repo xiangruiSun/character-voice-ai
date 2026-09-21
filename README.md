@@ -17,17 +17,21 @@ product around the winner. `docs/IMPLEMENTATION_PLAN.md` has the full sequence.
 
 ## Current status
 
-**Milestone 1 is complete.** Repository architecture, provider interfaces, configuration
-system, Character and Voice Pack schemas, and a working benchmark pipeline.
+**Milestones 1 and 2 are complete.**
 
-Everything in Milestone 1 runs with **no GPU, no model weights and no network** — only
-`pydantic` and `PyYAML`. That is deliberate: the apparatus that will answer the research
-question has to be trustworthy before a real engine is plugged into it.
+* **M1** — repository architecture, provider interfaces, configuration system, Character
+  and Voice Pack schemas, and a working benchmark pipeline.
+* **M2** — the Voice Pack preprocessing pipeline: resumable stages from raw audio to an
+  approved, annotated dataset and Reference Bank, with a human review loop.
+
+Both run with **no GPU, no model weights and no network** — only `pydantic` and
+`PyYAML`. That is deliberate: the apparatus that will answer the research question has to
+be trustworthy before a real engine is plugged into it.
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 91 tests
-make demo        # full pipeline on a synthetic pack with the mock engine
+make test        # 143 tests
+make demo        # full benchmark pipeline on a synthetic pack with the mock engine
 ```
 
 `make demo` generates audio for three candidates over 25 Chinese test sentences, builds a
@@ -115,6 +119,13 @@ listening, not by a leaderboard.
 cvai-voicepack init denia_cn --character denia_cn --display-name "迪尼娅"
 cvai-voicepack validate denia_cn --strict --check-profile denia_cn
 cvai-voicepack list
+
+# Preprocessing (Milestone 2)
+cvai-prep backends                                  # what is installed
+cvai-prep run denia_cn --source ~/denia_voice_lines --hotword 迪尼娅
+cvai-prep review denia_cn                           # writes processed/review.html
+cvai-prep apply denia_cn review-patch.json
+cvai-prep build denia_cn                            # clean/ + dataset + reference bank
 
 # Benchmark
 cvai-bench run configs/benchmarks/denia_cn_v1.yaml

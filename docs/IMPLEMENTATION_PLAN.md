@@ -60,10 +60,10 @@ justified from `docs/TECH_LANDSCAPE.md`.
 
 ---
 
-## Milestone 2 — Voice Pack preprocessing pipeline
+## Milestone 2 — Voice Pack preprocessing pipeline ✅
 
-**Components:** `cvai_voice_preprocessing` with one module per stage, each a pure
-function over a `ProcessedClip` plus a manifest entry.
+**Components:** `cvai_voice_preprocessing` — resumable stage pipeline, pluggable
+backends, human review loop, dataset and Reference Bank build. Entry point `cvai-prep`.
 
 1. `ingest` — game assets (AnimeWwise / vgmstream / AssetStudio) or plain audio → `raw/`,
    checksummed, never mutated afterwards.
@@ -83,9 +83,30 @@ function over a `ProcessedClip` plus a manifest entry.
 **Also:** a local review UI (single static page + JSON patch file) so a human can fix
 transcripts, re-label styles and approve/reject — spec §8 requires manual correction.
 
+**Built in Milestone 2, beyond the stage list:**
+
+* **Resumable state** (`processed/state.json`, written atomically after every stage).
+  ASR over an hour of audio is slow enough that a pipeline which cannot resume gets run
+  less often, and a pipeline that is run less often stops matching the data.
+* **Human edits are sticky.** Any segment a reviewer touched is marked `human_edited`,
+  and no automatic pass overwrites its transcript or style.
+* **Backends degrade honestly.** VAD, pitch, pacing, pauses, SNR, clipping, loudness and
+  a coarse speaker embedding are implemented in-repo and need no model. Transcription and
+  emotion fall back to backends that *report their own absence*; the ASR stub writes
+  visible placeholder text and `cvai-prep build` refuses to ship a dataset containing it.
+* **Speaker anchors.** The centroid is built from clips a human confirmed
+  (`cvai-prep anchors add`). Without anchors the pipeline says so rather than quietly
+  averaging every voice in the pack together.
+* **Held-out lines never become reference prompts**, so the benchmark's ground truth
+  cannot leak into the systems it measures.
+
 **Definition of done:** 20–60 min of approved `clean/` audio for `denia_cn`, a dataset
 manifest that validates, a reference bank with ≥2 clips per core style, and a
 `processing_chain` recorded per clip. Plus the null-processing control set.
+
+*Status: the pipeline and its tests are complete and run end to end on synthetic audio.
+The remaining work is data work — running it over real Denia recordings and reviewing
+the result — which needs the audio and the `preprocess` extra.*
 
 ---
 
