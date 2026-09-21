@@ -18,6 +18,18 @@ from .blind import (
     write_blind_test,
 )
 from .config import BenchmarkConfig, GroundTruthConfig, load_benchmark_config
+from .objective import (
+    ClipMeasurement,
+    ObjectiveBackends,
+    ProsodyComparison,
+    ProsodyProfile,
+    RunObjectiveReport,
+    compare_prosody,
+    measure_clip,
+    render_objective_report,
+    resolve_objective_backends,
+    score_run,
+)
 from .report import render_evaluation_report, render_run_report
 from .runner import BenchmarkRunner
 from .scoring import (
@@ -33,6 +45,16 @@ __all__ = [
     "ALL_AXES",
     "BenchmarkConfig",
     "BenchmarkRunner",
+    "ClipMeasurement",
+    "ObjectiveBackends",
+    "ProsodyComparison",
+    "ProsodyProfile",
+    "RunObjectiveReport",
+    "compare_prosody",
+    "measure_clip",
+    "render_objective_report",
+    "resolve_objective_backends",
+    "score_run",
     "GROUND_TRUTH_CANDIDATE_ID",
     "GroundTruthConfig",
     "aggregate",

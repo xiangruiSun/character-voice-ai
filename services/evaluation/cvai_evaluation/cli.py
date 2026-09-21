@@ -28,6 +28,12 @@ from cvai_types import BenchmarkRun, BlindKey, BlindTestSet, RatingAxis
 from .blind import build_blind_test, export_webmushra_config, write_blind_test
 from .config import load_benchmark_config
 from .demo_pack import build_demo_voicepack
+from .objective import (
+    ProsodyProfile,
+    render_objective_report,
+    resolve_objective_backends,
+    score_run,
+)
 from .report import render_evaluation_report, render_run_report
 from .runner import BenchmarkRunner
 from .scoring import ALL_AXES, aggregate, load_ratings, rater_agreement
@@ -141,9 +147,34 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
 def cmd_report(args: argparse.Namespace) -> int:
     paths, run = _load_run(Path(args.run_dir))
     rendered = render_run_report(run)
+    if args.objective:
+        rendered += "\n" + _objective_section(run, paths, args)
     paths.report_file.write_text(rendered, encoding="utf-8")
     print(rendered)
     return 0
+
+
+def _objective_section(run, paths, args) -> str:
+    """Measure generated audio against the character's real prosody distribution."""
+    from cvai_core.loaders import open_voicepack, try_load_dataset_manifest
+
+    packs_root = Path(args.packs_root) if getattr(args, "packs_root", None) else None
+    try:
+        pack_paths, _ = open_voicepack(run.voicepack_id, packs_root)
+    except CVAIError as exc:
+        return f"## Objective metrics\n\n> unavailable: {exc}\n"
+
+    dataset = try_load_dataset_manifest(pack_paths)
+    if dataset is None:
+        return (
+            "## Objective metrics\n\n> unavailable: the voice pack has no dataset, so "
+            "there is nothing to compare generated prosody against.\n"
+        )
+
+    profile = ProsodyProfile.from_dataset(pack_paths, dataset)
+    backends = resolve_objective_backends()
+    report = score_run(run, paths, profile, backends=backends)
+    return render_objective_report(report)
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
@@ -193,6 +224,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cvai-bench", description=__doc__)
     parser.add_argument("--config", help="path to app.yaml (default: configs/app.yaml)")
+    parser.add_argument("--packs-root", help="override the voicepacks directory")
     parser.add_argument("--log-level", default="INFO")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -223,6 +255,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     report_parser = sub.add_parser("report", help="re-render the run report")
     report_parser.add_argument("run_dir")
+    report_parser.add_argument(
+        "--objective",
+        action="store_true",
+        help="also measure generated prosody against the character's real distribution",
+    )
     report_parser.set_defaults(func=cmd_report)
 
     demo_parser = sub.add_parser(

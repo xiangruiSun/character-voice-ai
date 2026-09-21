@@ -39,7 +39,7 @@ from cvai_types import (
     utcnow,
 )
 
-from . import dsp
+from cvai_core import dsp
 from .audio_io import (
     decode_to_wav,
     iter_audio_files,

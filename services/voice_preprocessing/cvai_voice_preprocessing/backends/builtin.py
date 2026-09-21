@@ -21,7 +21,7 @@ from typing import Sequence
 
 from cvai_types import ProcessingStage
 
-from .. import dsp
+from cvai_core import dsp
 from ..audio_io import read_samples
 from .base import ASRBackend, ASRResult, EmotionBackend, EmotionResult, SpeakerBackend, VADBackend
 

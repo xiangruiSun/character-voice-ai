@@ -1,13 +1,19 @@
-"""Signal measurements the pipeline needs, implemented without a model.
+"""Signal measurements, implemented without a model.
 
 These are real analyses, not placeholders: an energy-gated VAD, autocorrelation pitch
-tracking, SNR estimation, clipping detection and loudness. They are here rather than
-behind an optional dependency because they are small, and because being able to measure
-a voice pack on any machine — no torch, no CUDA, no downloads — is what makes the
-pipeline's numbers reviewable by whoever is looking at the data.
+tracking, SNR estimation, clipping detection and loudness. They live in core because
+**two** stages need exactly the same measurements and must agree:
 
-The model-backed stages (ASR, source separation, speaker identity, emotion) do live
-behind optional dependencies; see ``backends/``.
+* Milestone 2 measures the character's real recordings while building a Voice Pack;
+* Milestone 6 measures generated audio and compares it against that distribution.
+
+If those two used different implementations, every prosody comparison would carry an
+unknown systematic offset. Sharing one module makes the comparison meaningful.
+
+Being dependency-free matters for the same reason it does elsewhere in this project: a
+voice pack can be measured, and a benchmark scored, on any machine — no torch, no CUDA,
+no downloads. The model-backed analyses (ASR, speaker identity, emotion) live behind
+optional dependencies instead.
 
 ``numpy`` is used when present and the pure-Python path is kept correct, because the
 fallback is what runs in CI and in a fresh checkout.
@@ -214,6 +220,8 @@ def energy_vad(
     speech_pad_ms: float = 180.0,
     margin_db: float = 12.0,
     floor_below_peak_db: float = 38.0,
+    min_dynamic_range_db: float = 15.0,
+    absolute_floor_dbfs: float = -50.0,
 ) -> list[SpeechSegment]:
     """Adaptive energy-gated voice activity detection.
 
@@ -233,6 +241,17 @@ def energy_vad(
 
     noise_floor = _percentile(energies, 0.10)
     peak = max(energies)
+
+    # A gate that calibrates on the clip's own noise floor has nothing to calibrate
+    # against when the clip has no silence in it. Real speech almost always does, but
+    # a sustained tone, a continuous scream, or a clip already trimmed to the syllable
+    # does not — and the gate would then declare the whole thing silence, which is the
+    # worst possible answer. Decide by absolute level instead.
+    if peak - noise_floor < min_dynamic_range_db:
+        if peak <= absolute_floor_dbfs:
+            return []
+        return [SpeechSegment(0.0, round(len(samples) / sample_rate, 4))]
+
     threshold = max(noise_floor + margin_db, peak - floor_below_peak_db)
 
     voiced = [energy >= threshold for energy in energies]

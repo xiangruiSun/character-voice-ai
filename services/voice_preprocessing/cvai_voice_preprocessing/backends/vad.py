@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from ..dsp import SpeechSegment
+from cvai_core.dsp import SpeechSegment
 from .base import VADBackend
 
 _HINT = "silero-vad is not installed; `pip install silero-vad` (MIT) for better segmentation"

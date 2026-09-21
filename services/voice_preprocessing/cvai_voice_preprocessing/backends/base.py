@@ -21,7 +21,7 @@ from typing import Sequence
 from cvai_types import CVAIModel, ProcessingStage, ProcessingStep
 from pydantic import Field
 
-from ..dsp import SpeechSegment
+from cvai_core.dsp import SpeechSegment
 
 
 class BackendInfo(CVAIModel):

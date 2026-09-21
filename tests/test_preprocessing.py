@@ -35,7 +35,7 @@ from cvai_voice_preprocessing import (
     resolve_backends,
     save_state,
 )
-from cvai_voice_preprocessing import dsp
+from cvai_core import dsp
 from cvai_voice_preprocessing.backends import STUB_TRANSCRIPT_SOURCE
 from cvai_voice_preprocessing.pipeline import BuildError
 from cvai_voice_preprocessing.review import render_review_page

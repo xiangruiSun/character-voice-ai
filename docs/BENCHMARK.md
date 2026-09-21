@@ -141,16 +141,40 @@ that answers that is the distance to the anchor, approaching zero.
 
 ## Objective metrics (Milestone 6)
 
+```bash
+cvai-bench report runs/<run_id> --objective
+```
+
 They rank candidates and catch regressions. They do not choose the winner.
+
+**Prosody comparison — always available, no model needed.** The character's real speech
+has a measurable distribution: pitch centre and spread, speaking rate, pause density,
+silence ratio. Generated audio is measured with *the same code* (`cvai_core.dsp`, shared
+with the Voice Pack pipeline precisely so the two agree) and compared against it. The
+reference distribution is built from the **held-out** split — real lines no engine was
+trained on.
+
+This is what turns two of spec §27's failure modes into numbers:
+
+| Symptom | What it looks like | Flag |
+|---|---|---|
+| identical intonation across all sentences | F0 σ ratio below ~0.6 | "flat delivery" |
+| wrong voice, however natural | pitch centre more than 2σ from the character's | "pitch centre is ±N Hz from the character's" |
+| robotic pacing | speaking rate outside 75–133% of hers | "speaking rate is N% of the character's" |
+| padded clips | silence ratio well above hers | "more silence than the character's real lines" |
+
+The per-candidate distance combines the axes by **RMS, not mean**: a candidate that
+matches on three axes and is badly wrong on the fourth is not three-quarters right, and
+averaging would dilute exactly the signal worth acting on.
+
+**Model-backed metrics — when installed.** Each reports its own absence rather than
+quietly returning nothing.
 
 * **TTSDS2** — factored (generic / speaker / prosody / intelligibility), the only metric
   of sixteen tested that held Spearman > 0.50 against human MOS in every domain.
 * **SECS** — CAM++/ERes2NetV2 cosine against real character audio, always reported
   against the **real-vs-real ceiling**, never against 1.0.
 * **CER** — paraformer-zh on the generated audio versus the input text.
-* **Prosody distance** — F0 mean and spread, speaking rate, pause distribution, against
-  the character's measured distribution. This is how "identical intonation across all
-  sentences" becomes a number instead of a vague impression.
 * **UTMOSv2 / DNSMOS** — recorded, weakest evidence of the set; reference-free predictors
   degrade precisely in the high-quality regime this project operates in.
 
