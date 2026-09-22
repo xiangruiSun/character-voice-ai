@@ -11,6 +11,8 @@ import abc
 
 from cvai_types import CharacterProfile, DialogueExample
 
+from ..dialogue_examples import select_examples
+
 
 class CharacterProvider(abc.ABC):
     @abc.abstractmethod
@@ -33,13 +35,11 @@ class CharacterProvider(abc.ABC):
 
         Spec §11 wants "system prompt + original dialogue examples + lore + history", and
         the examples are the part that actually carries voice. The default implementation
-        filters by style and truncates; Milestone 8 can replace it with embedding
-        retrieval without changing any caller.
+        scores them against what the user just said (see
+        :mod:`cvai_core.dialogue_examples`); a provider backed by an embedding index can
+        override this without changing any caller.
         """
         profile = self.get(character_id)
-        pool = profile.dialogue_examples
-        if style:
-            styled = [e for e in pool if e.style == style]
-            if styled:
-                pool = styled
-        return list(pool[:limit])
+        return select_examples(
+            query, profile.dialogue_examples, limit=limit, style=style
+        )

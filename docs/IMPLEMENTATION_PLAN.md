@@ -158,6 +158,20 @@ and finally plain text with the character's default register. A conversation tur
 fails over formatting, and which path ran is recorded, because a planner silently living
 on the third path is one whose provider needs changing.
 
+**Which examples get shown is most of the prompt's value.** Spec §11 rules out
+fine-tuning, so original dialogue is the only thing carrying her voice — and with two
+hundred lines in a profile and room for six, the selection is doing the work. The first
+implementation took the first six after a style filter, which meant a question about her
+past, a joke and a goodbye all saw the same evidence. `cvai_core.dialogue_examples` now
+scores them: IDF-weighted character bigrams (no segmenter, no embeddings, no network),
+matched mainly against what was said *to* her, because the situation predicts her answer
+far better than the wording of the answer does. Style is a strong preference rather than
+a filter — hard filtering is how a character with two teasing lines ends up showing the
+model two lines and nothing else — and near-duplicates are dropped, because six
+paraphrases demonstrate none of her range. Selection is deterministic and the chosen
+lines are presented in profile order, so the prompt reads as a transcript of her rather
+than a ranked list.
+
 Guards then make the plan performable: a style the voice pack does not have is mapped to
 one it does, an over-long reply is cut at a sentence boundary rather than mid-clause,
 bracketed narration is stripped, and a reply that breaks character is flagged. Repairs are

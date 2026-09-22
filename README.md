@@ -43,11 +43,11 @@ model-backed stage reports its own absence rather than silently producing nothin
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 404 tests
+make test        # 426 tests
 make demo        # full benchmark pipeline on a synthetic pack with the mock engine
 ```
 
-`make demo` generates audio for three candidates over 25 Chinese test sentences, builds a
+`make demo` generates audio for four candidates — including the null-processing control — over 25 Chinese test sentences, builds a
 blind listening test with real-recording anchors, aggregates (simulated) ratings and
 writes both reports — in about a minute, on a laptop.
 
