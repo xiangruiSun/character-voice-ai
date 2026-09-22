@@ -14,9 +14,15 @@ Container definitions live in `infra/sidecars/`, and the HTTP contract in
 | `cosyvoice/` | Fun-CosyVoice3 0.5B | 5c | CVAI sidecar | SFT | Apache-2.0 |
 | `voxcpm/` | VoxCPM2 | 5d | CVAI sidecar | SFT / LoRA | Apache-2.0 |
 
-Runbooks exist for the three engines the brief named (`gpt_sovits`, `qwen3_tts`,
-`fish_speech`). The optional three are zero-shot rows first; their setup is one
-`docker compose up` each and needs no training pass.
+Every engine has a `RUNBOOK.md`. The three the brief named (`gpt_sovits`, `qwen3_tts`,
+`fish_speech`) are training-first; the three the technology survey added are zero-shot
+rows first, and two of them (`cosyvoice`, `voxcpm`) have an adaptation path worth running
+afterwards. IndexTTS has none and competes zero-shot only.
+
+Each runbook ends with **what to listen for** rather than only how to run the thing. The
+commands are the easy part; knowing that instruction text can occasionally be *spoken*
+instead of performed, or that a benchmark-wide resample is where a 48 kHz engine's
+advantage quietly disappears, is what stops a bad result from being read as a good one.
 
 ---
 

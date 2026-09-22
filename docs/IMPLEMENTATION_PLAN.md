@@ -135,6 +135,15 @@ CosyVoice3 (zero-shot + instruct + SFT), **M5d** VoxCPM2 (LoRA, 48 kHz). These a
 once the adapter interface exists and they cover the "explicit emotion control" axis that
 GPT-SoVITS cannot express.
 
+All six now have a `models/<engine>/RUNBOOK.md`, each ending with **what to listen for**
+rather than only how to run it. The commands are the easy part. Knowing that a style
+instruction can occasionally be *spoken* rather than performed, that a benchmark-wide
+resample is where a 48 kHz engine's advantage quietly disappears, or that a LoRA which
+already matches the character makes full SFT a way to spend GPU hours risking a
+regression — that is what stops a bad result from reading as a good one. The three
+optional engines' runbooks were written against their current upstream documentation, and
+each cites its sources so a stale instruction can be told apart from a wrong one.
+
 ## Milestone 6 — Shared evaluation pipeline + human A/B interface
 
 Objective: TTSDS2, SECS (CAM++), CER (paraformer-zh), F0/rate/pause distribution distance
