@@ -222,7 +222,11 @@ def cmd_demo(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cvai-bench", description=__doc__)
+    parser = argparse.ArgumentParser(prog="cvai-bench", description=__doc__,
+        # The module docstrings are written as usage examples; the default
+        # formatter reflows them into one unreadable paragraph.
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--config", help="path to app.yaml (default: configs/app.yaml)")
     parser.add_argument("--packs-root", help="override the voicepacks directory")
     parser.add_argument("--log-level", default="INFO")

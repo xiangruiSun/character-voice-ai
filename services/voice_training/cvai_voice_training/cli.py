@@ -81,7 +81,11 @@ def cmd_export(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cvai-export", description=__doc__)
+    parser = argparse.ArgumentParser(prog="cvai-export", description=__doc__,
+        # The module docstrings are written as usage examples; the default
+        # formatter reflows them into one unreadable paragraph.
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--packs-root")
     parser.add_argument("--log-level", default="INFO")
     sub = parser.add_subparsers(dest="command", required=True)

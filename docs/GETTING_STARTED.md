@@ -170,10 +170,18 @@ verifying; discovering that after building a product on one of them is expensive
 ## 6. Talk to her
 
 ```bash
+cvai-talk denia_cn                  # from the terminal, no browser needed
+cvai-talk denia_cn --audition       # one line per style, as a page to listen through
+
 pip install -e '.[runtime]'
 uvicorn cvai_api.app:app --port 8000
 open apps/web/dev-client.html
 ```
+
+Run `--audition` first and listen for one thing: whether the styles are actually
+different from each other. If they are not, the fault is upstream of the engine — the
+Reference Bank, or styles declared in the profile that the pack cannot perform — and no
+amount of retraining will fix it.
 
 Type, or press 开麦 and speak — endpointing, transcription and barge-in all happen
 server-side. Set her engine in `characters/profiles/<id>.yaml` under

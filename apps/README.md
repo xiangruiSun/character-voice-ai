@@ -44,6 +44,26 @@ curl -s -XPOST localhost:8000/sessions/$SID/turn \
 Sessions are in-memory. Spec §3 rules out a database until the character voice pipeline
 works, so a restart loses conversations — an intended trade, not an oversight.
 
+### `cvai-talk` — the same conversation from a terminal
+
+```bash
+cvai-talk denia_cn                  # type at her, hear her answer
+cvai-talk denia_cn --say "在吗"      # one line and exit
+cvai-talk denia_cn --audition       # one line per style, as a page to listen through
+```
+
+Same orchestrator, different transport. The browser client answers "does the whole thing
+work end to end?"; this answers "does she sound right?", which is the question asked
+twenty times a day while a voice pack is being built, often on a machine with no browser.
+`--verbose` shows the performance plan, the chunking and which reference clip conditioned
+each chunk — spec §12 keeps that away from *users*, but the person building the voice is
+not a user.
+
+**`--audition` is not a benchmark.** It puts one line per declared style side by side,
+which makes style collapse (spec §27) obvious in thirty seconds, but nothing in it is
+blind and there are no real recordings to compare against. It tells you a voice pack is
+wrong; only `cvai-bench` can suggest one is right.
+
 ---
 
 ## `web/` — the frontend

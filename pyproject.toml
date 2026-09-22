@@ -54,6 +54,7 @@ cvai-bench = "cvai_evaluation.cli:main"
 cvai-prep = "cvai_voice_preprocessing.cli:main"
 cvai-export = "cvai_voice_training.cli:main"
 cvai-api = "cvai_api.app:main"
+cvai-talk = "cvai_api.talk_cli:main"
 
 [tool.setuptools.packages.find]
 # One distribution, many source roots — keeps the spec's folder separation (§22)

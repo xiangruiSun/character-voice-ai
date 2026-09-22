@@ -43,13 +43,14 @@ model-backed stage reports its own absence rather than silently producing nothin
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 452 tests
+make test        # 469 tests
 make demo        # full benchmark pipeline on a synthetic pack with the mock engine
 ```
 
-`make demo` generates audio for four candidates — including the null-processing control — over 25 Chinese test sentences, builds a
-blind listening test with real-recording anchors, aggregates (simulated) ratings and
-writes both reports — in about a minute, on a laptop.
+`make demo` generates audio for four candidates — including the null-processing control
+— over 25 Chinese test sentences, builds a blind listening test with real-recording
+anchors, aggregates (simulated) ratings and writes both reports, in about a minute on a
+laptop.
 
 ---
 
@@ -151,6 +152,9 @@ cvai-bench blind runs/<run_id> --webmushra
 cvai-bench aggregate runs/<run_id> --ratings ratings/
 
 # Talk to her (Milestones 9-13)
+cvai-talk denia_cn                                  # from the terminal
+cvai-talk denia_cn --audition                       # one line per style, side by side
+
 pip install -e '.[runtime]'
 uvicorn cvai_api.app:app --port 8000
 open apps/web/dev-client.html          # type, or press 开麦 and speak
