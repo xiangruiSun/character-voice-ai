@@ -177,27 +177,40 @@ nominally Milestone 12). Cuts on Chinese sentence endings, merges pieces too sho
 worth a separate request, uses comma-level boundaries only past the preferred length, and
 never strands a conjunction at the start of a chunk.
 
-## Milestone 9 — Text chat application
+## Milestones 9, 10, 12, 13 — the conversation loop ✅
 
-FastAPI + streaming LLM, conversation state machine, no audio yet.
+`cvai_conversation` (orchestrator), `cvai_api` (HTTP + WebSocket), `apps/web/dev-client.html`.
 
-## Milestone 10 — Character TTS inference in the app
+**The orchestrator** owns pipeline state and emits one `TurnEvent` stream that every
+transport consumes — API, CLI and tests alike, so "what happens during a turn" is defined
+once and cannot drift between them.
 
-Reference retrieval → chosen engine → audio out. Engine held warm in its sidecar.
+**Planning mode** resolves a real tension between spec §12 (a structured performance plan
+for the reply) and spec §14 (start speaking before the reply is finished). The plan
+describes the whole utterance, so it cannot exist until the LLM has finished:
 
-## Milestone 11 — Microphone input, STT, voice conversation
+* `complete` (default) — full plan, then normalize → chunk → synthesize, streaming each
+  chunk's audio as it is ready. TTS is pipelined; the LLM is not. This follows spec §14's
+  own instruction that naturalness beats speed.
+* `streaming` — chunk the LLM's text as it arrives, speak it in the character's default
+  register. Lower latency, no per-line performance direction.
 
-Browser capture → VAD → `SpeechToTextProvider` → the existing loop.
+**Barge-in** (Milestone 13) is built in rather than retrofitted, which is what spec §16
+asks for. All four of its required behaviours are separately tested: further audio stops,
+the queue drains, in-flight synthesis is cancelled, and audio that *finishes* just after
+the interrupt is dropped rather than played — otherwise the character gets one more word
+in after being cut off. An interrupt carries the turn id it targets, so a late signal
+cannot silence the next reply.
 
-## Milestone 12 — Streaming speech chunks
+**The API** is layered so almost none of it needs a web server to test: session assembly
+and event→protocol mapping are pure functions; `app.py` is transport only. The mapping
+deliberately drops the performance metadata — spec §12 says the user only sees the text,
+and not sending emotion or reference style to the browser means no frontend can start
+displaying or deciding it.
 
-Sentence-boundary chunker on Chinese punctuation with min/max length and semantic
-completeness; audio queue; overlap-aware playback.
-
-## Milestone 13 — Barge-in
-
-Interruption signal drains the queue, cancels in-flight TTS jobs and (optionally) the LLM
-stream; state machine moves to `INTERRUPTED` → `LISTENING`.
+**Milestone 11 (microphone + STT) is the remaining piece.** The `SpeechToTextProvider`
+interface, the audio protocol's upstream messages and the orchestrator's interrupt path
+are all in place; what is missing is browser capture and wiring `submit_audio`.
 
 ## Milestone 14 — Additional Voice Packs
 

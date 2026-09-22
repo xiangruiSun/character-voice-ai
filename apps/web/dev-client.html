@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>角色语音 · 开发客户端</title>
+<!--
+  Development client for the conversation API (Milestones 9-13).
+
+  One file, no build step, no dependencies. Spec §29 says not to start by polishing the
+  website, and the Next.js app in this directory's README is the Milestone 9+ deliverable;
+  this exists so the *pipeline* can be used and heard today.
+
+  It deliberately demonstrates the two rules the real frontend must also follow:
+
+    1. State is observed, never decided (spec §15). Every badge below reflects a `state`
+       message from the server. The page never sets pipeline state itself.
+    2. The user sees text and hears audio — nothing else. The performance metadata
+       (emotion, intensity, reference style) is not sent to the browser at all, so there
+       is nothing here to accidentally display or act on (spec §12).
+-->
+<style>
+  :root {
+    --bg:#fff; --fg:#16181d; --muted:#5b6270; --line:#e3e6ec; --card:#f7f8fa;
+    --accent:#2f6df6; --warn:#b3730a; --bad:#c23b3b; --ok:#1f9254;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#14161a; --fg:#e9ecf1; --muted:#98a1b0; --line:#2a2f38; --card:#1b1e24;
+      --accent:#6f9bff; --warn:#e0a84a; --bad:#ef7676; --ok:#4ec281;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--fg);
+    font:15px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  }
+  .wrap { max-width:760px; margin:0 auto; padding:20px 16px 140px; }
+  h1 { font-size:19px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+
+  .setup { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  .setup input, .setup select {
+    padding:7px 9px; border:1px solid var(--line); border-radius:8px;
+    background:var(--bg); color:var(--fg);
+  }
+  button {
+    padding:7px 13px; border-radius:8px; border:1px solid var(--accent);
+    background:var(--accent); color:#fff; font:inherit; cursor:pointer;
+  }
+  button.ghost { background:transparent; color:var(--accent); }
+  button:disabled { opacity:.45; cursor:default; }
+
+  .status { display:flex; gap:8px; align-items:center; margin-bottom:14px; font-size:13px; }
+  .badge {
+    padding:3px 9px; border-radius:999px; border:1px solid var(--line);
+    background:var(--card); color:var(--muted); font-family:ui-monospace,monospace;
+  }
+  .badge.live { border-color:var(--accent); color:var(--accent); }
+  .badge.speaking { border-color:var(--ok); color:var(--ok); }
+  .badge.interrupted { border-color:var(--warn); color:var(--warn); }
+  .badge.error { border-color:var(--bad); color:var(--bad); }
+
+  .log { display:flex; flex-direction:column; gap:10px; }
+  .msg { padding:10px 13px; border-radius:12px; max-width:85%; }
+  .msg.user { align-self:flex-end; background:var(--accent); color:#fff; }
+  .msg.her { align-self:flex-start; background:var(--card); border:1px solid var(--line); }
+  .msg.sys { align-self:center; font-size:12px; color:var(--muted); }
+  .msg.err { align-self:center; font-size:13px; color:var(--bad); }
+  .clips { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .clips audio { height:32px; }
+
+  .bar {
+    position:fixed; left:0; right:0; bottom:0; background:var(--bg);
+    border-top:1px solid var(--line); padding:10px 16px;
+  }
+  .bar .inner { max-width:760px; margin:0 auto; display:flex; gap:8px; }
+  .bar input { flex:1; padding:9px 11px; border:1px solid var(--line);
+    border-radius:8px; background:var(--bg); color:var(--fg); }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>角色语音 · 开发客户端</h1>
+  <div class="sub">
+    文字输入 → 角色大脑 → 演出规划 → 中文文本规范化 → 参考音选择 → 语音合成 → 播放
+  </div>
+
+  <div class="setup">
+    <input id="api" value="http://127.0.0.1:8000" size="24" aria-label="API base URL">
+    <select id="character"><option value="">（默认角色）</option></select>
+    <button id="connect">开始会话</button>
+    <button id="hangup" class="ghost" disabled>结束</button>
+  </div>
+
+  <div class="status">
+    <span class="badge" id="conn">未连接</span>
+    <span class="badge" id="state">idle</span>
+    <span class="badge" id="engine">—</span>
+  </div>
+
+  <div class="log" id="log"></div>
+</div>
+
+<div class="bar">
+  <div class="inner">
+    <input id="text" placeholder="说点什么…" disabled autocomplete="off">
+    <button id="send" disabled>发送</button>
+    <button id="stop" class="ghost" disabled title="打断当前回答">打断</button>
+  </div>
+  <div class="hint">Enter 发送 · Esc 打断（barge-in）</div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const log = $("log");
+
+  let socket = null;
+  let sessionId = null;
+  let currentTurn = null;
+  let queue = [];          // audio elements waiting to play, in order
+  let playing = null;
+  let herBubble = null;
+
+  // -- UI helpers ------------------------------------------------------------
+
+  function bubble(kind, text) {
+    const node = document.createElement("div");
+    node.className = "msg " + kind;
+    node.textContent = text;
+    log.appendChild(node);
+    window.scrollTo(0, document.body.scrollHeight);
+    return node;
+  }
+
+  function setState(value) {
+    const badge = $("state");
+    badge.textContent = value;
+    badge.className = "badge " + (
+      value === "speaking" ? "speaking" :
+      value === "interrupted" ? "interrupted" :
+      value === "error" ? "error" : ""
+    );
+  }
+
+  function setConnected(on, label) {
+    $("conn").textContent = label;
+    $("conn").className = "badge" + (on ? " live" : "");
+    $("text").disabled = !on;
+    $("send").disabled = !on;
+    $("stop").disabled = !on;
+    $("hangup").disabled = !on;
+    $("connect").disabled = on;
+  }
+
+  // -- audio queue -----------------------------------------------------------
+  //
+  // Chunks arrive as they are synthesized and must play strictly in order with no
+  // gap. Barge-in empties this queue and stops whatever is mid-playback — spec §16's
+  // "stop current audio playback" and "clear queued TTS audio".
+
+  function enqueue(blob) {
+    const audio = new Audio(URL.createObjectURL(blob));
+    audio.addEventListener("ended", () => { playing = null; playNext(); });
+    queue.push(audio);
+    if (!playing) playNext();
+  }
+
+  function playNext() {
+    if (playing || !queue.length) return;
+    playing = queue.shift();
+    playing.play().catch(() => { playing = null; playNext(); });
+  }
+
+  function drain() {
+    queue = [];
+    if (playing) { playing.pause(); playing = null; }
+  }
+
+  // -- session ---------------------------------------------------------------
+
+  async function loadCharacters() {
+    try {
+      const response = await fetch($("api").value + "/characters");
+      const data = await response.json();
+      const select = $("character");
+      (data.characters || []).forEach(function (id) {
+        const option = document.createElement("option");
+        option.value = id; option.textContent = id;
+        select.appendChild(option);
+      });
+    } catch (e) { /* the API may not be up yet; the field stays on default */ }
+  }
+
+  async function connect() {
+    const base = $("api").value.replace(/\/$/, "");
+    setConnected(false, "连接中…");
+    try {
+      const response = await fetch(base + "/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ character_id: $("character").value || null })
+      });
+      if (!response.ok) throw new Error((await response.json()).detail || response.statusText);
+      const data = await response.json();
+      sessionId = data.session_id;
+      $("engine").textContent = data.engine;
+      bubble("sys", "已连接 " + data.character_name + "（引擎 " + data.engine + "）");
+
+      const url = base.replace(/^http/, "ws") + "/sessions/" + sessionId + "/ws";
+      socket = new WebSocket(url);
+      socket.binaryType = "blob";
+      socket.onopen = () => setConnected(true, "已连接");
+      socket.onclose = () => { setConnected(false, "已断开"); socket = null; };
+      socket.onerror = () => bubble("err", "WebSocket 错误");
+      socket.onmessage = onMessage;
+    } catch (error) {
+      setConnected(false, "未连接");
+      bubble("err", "无法连接：" + error.message);
+    }
+  }
+
+  function onMessage(event) {
+    if (event.data instanceof Blob) { enqueue(event.data); return; }
+
+    let message;
+    try { message = JSON.parse(event.data); } catch (e) { return; }
+
+    switch (message.type) {
+      case "state":
+        // Rule 1: the page displays server state; it never decides it.
+        setState(message.state);
+        if (message.state === "interrupted") drain();
+        break;
+      case "character_text":
+        if (!herBubble || herBubble.dataset.turn !== message.turn_id) {
+          herBubble = bubble("her", "");
+          herBubble.dataset.turn = message.turn_id;
+        }
+        herBubble.textContent += message.text;
+        break;
+      case "audio_begin":
+        currentTurn = message.turn_id;
+        break;
+      case "turn_end":
+        if (message.was_interrupted) bubble("sys", "（被打断）");
+        currentTurn = null;
+        herBubble = null;
+        break;
+      case "error":
+        bubble("err", message.message || "未知错误");
+        break;
+    }
+  }
+
+  function send() {
+    const input = $("text");
+    const text = input.value.trim();
+    if (!text || !socket) return;
+    bubble("user", text);
+    input.value = "";
+    drain();                       // a new turn supersedes whatever is still playing
+    socket.send(JSON.stringify({ type: "user_text", text: text }));
+  }
+
+  function interrupt() {
+    if (!socket) return;
+    drain();
+    socket.send(JSON.stringify({ type: "interrupt", turn_id: currentTurn }));
+  }
+
+  async function hangup() {
+    drain();
+    if (socket) { socket.send(JSON.stringify({ type: "bye" })); socket.close(); }
+    if (sessionId) {
+      try {
+        await fetch($("api").value + "/sessions/" + sessionId, { method: "DELETE" });
+      } catch (e) {}
+    }
+    sessionId = null;
+    setConnected(false, "未连接");
+    setState("idle");
+  }
+
+  // -- wiring ----------------------------------------------------------------
+
+  $("connect").addEventListener("click", connect);
+  $("hangup").addEventListener("click", hangup);
+  $("send").addEventListener("click", send);
+  $("stop").addEventListener("click", interrupt);
+  $("text").addEventListener("keydown", function (event) {
+    if (event.key === "Enter") { event.preventDefault(); send(); }
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") interrupt();
+  });
+
+  loadCharacters();
+  setConnected(false, "未连接");
+})();
+</script>
+</body>
+</html>

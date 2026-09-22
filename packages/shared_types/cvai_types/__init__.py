@@ -38,6 +38,8 @@ from .conversation import (
     SessionConfig,
     StateTransition,
     Turn,
+    TurnEvent,
+    TurnEventType,
     can_transition,
 )
 from .evaluation import (
@@ -220,6 +222,8 @@ __all__ = [
     "SessionConfig",
     "StateTransition",
     "Turn",
+    "TurnEvent",
+    "TurnEventType",
     "can_transition",
     # evaluation
     "AXIS_HIGHER_IS_BETTER",

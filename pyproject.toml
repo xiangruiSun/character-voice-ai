@@ -52,6 +52,7 @@ cvai-voicepack = "cvai_core.cli.voicepack_cli:main"
 cvai-bench = "cvai_evaluation.cli:main"
 cvai-prep = "cvai_voice_preprocessing.cli:main"
 cvai-export = "cvai_voice_training.cli:main"
+cvai-api = "cvai_api.app:main"
 
 [tool.setuptools.packages.find]
 # One distribution, many source roots — keeps the spec's folder separation (§22)
@@ -68,6 +69,7 @@ where = [
     "services/text_normalizer",
     "services/speech_planner",
     "services/conversation",
+    "apps/api",
     "providers/tts",
     "providers/stt",
     "providers/llm",
@@ -87,6 +89,7 @@ pythonpath = [
     "services/text_normalizer",
     "services/speech_planner",
     "services/conversation",
+    "apps/api",
     "providers/tts",
     "providers/stt",
     "providers/llm",

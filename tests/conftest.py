@@ -26,6 +26,7 @@ _SOURCE_ROOTS = [
     "services/text_normalizer",
     "services/speech_planner",
     "services/conversation",
+    "apps/api",
     "providers/tts",
     "providers/stt",
     "providers/llm",

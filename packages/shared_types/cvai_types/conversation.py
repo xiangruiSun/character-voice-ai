@@ -115,6 +115,51 @@ class InterruptSignal(CVAIModel):
     at: str = Field(default_factory=lambda: utcnow().isoformat())
 
 
+class TurnEventType(str, Enum):
+    """What the orchestrator emits while running one turn.
+
+    A single event stream rather than separate callbacks: the API layer, the CLI and
+    the tests all consume the same sequence, so "what happens during a turn" is defined
+    in exactly one place and cannot drift between transports.
+    """
+
+    STATE = "state"
+    TRANSCRIPT = "transcript"
+    #: Raw text as the LLM produces it. For a caption track, never for TTS.
+    TEXT_DELTA = "text_delta"
+    PLAN = "plan"
+    #: A chunk of text that has been normalized and is about to be synthesized.
+    CHUNK = "chunk"
+    #: Synthesized audio for a chunk, ready to play.
+    AUDIO = "audio"
+    TURN_END = "turn_end"
+    ERROR = "error"
+
+
+class TurnEvent(CVAIModel):
+    """One thing that happened during a turn."""
+
+    type: TurnEventType
+    turn_id: str
+    at: str = Field(default_factory=lambda: utcnow().isoformat())
+
+    state: ConversationState | None = None
+    text: str = ""
+    chunk_index: int | None = Field(default=None, ge=0)
+    is_final: bool = False
+    #: Path to a rendered audio file, for the AUDIO event.
+    audio_path: str | None = None
+    sample_rate: int | None = None
+    duration_s: float | None = None
+    #: Which reference clip conditioned this chunk. Kept on the event so a live
+    #: conversation is as traceable as a benchmark run (spec §23).
+    reference_id: str | None = None
+    engine: str | None = None
+    latency_ms: float | None = None
+    error: str | None = None
+    detail: str = ""
+
+
 class Turn(CVAIModel):
     turn_index: int = Field(ge=0)
     user_text: str = ""
