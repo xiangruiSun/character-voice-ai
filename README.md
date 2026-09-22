@@ -43,9 +43,15 @@ model-backed stage reports its own absence rather than silently producing nothin
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 499 tests
+make test        # 517 tests
 make demo        # full benchmark pipeline on a synthetic pack with the mock engine
+make talk        # hold a conversation with the synthetic demo character, offline
 ```
+
+`make talk` is the fastest way to see what this is. No API key, no GPU, no network: a
+scripted LLM plays the character's brain, the mock engine plays her voice, and everything
+between them — performance planning, Chinese text normalization, chunking, reference
+retrieval, synthesis — is the real thing.
 
 `make demo` generates audio for four candidates — including the null-processing control
 — over 25 Chinese test sentences, builds a blind listening test with real-recording

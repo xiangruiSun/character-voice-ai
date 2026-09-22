@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .mock_llm import MockLLMProvider
 from .openai_llm import OpenAILLMProvider
 
-__all__ = ["OpenAILLMProvider"]
+__all__ = ["MockLLMProvider", "OpenAILLMProvider"]

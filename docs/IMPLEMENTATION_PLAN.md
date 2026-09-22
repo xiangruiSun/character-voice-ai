@@ -181,6 +181,16 @@ paraphrases demonstrate none of her range. Selection is deterministic and the ch
 lines are presented in profile order, so the prompt reads as a transcript of her rather
 than a ranked list.
 
+**The whole conversation runs offline.** A `mock` LLM provider joins the mock TTS engine,
+so `make talk` holds a real turn — planner, guards, normalizer, chunker, reference
+retrieval, synthesis, playback — with no key, no GPU and no network. It is a scripted
+provider, not a small model: it borrows the character's own dialogue examples out of the
+prompt they were placed into, carries each line's style through so `--audition` actually
+varies, and is deterministic so a difference between two runs is never its doing. It
+implements `complete_structured`, deliberately: a development provider that silently
+pushes the planner onto its parse-and-repair fallback teaches you that the fallback is
+normal, and then the day a real provider degrades, nothing looks wrong.
+
 **Memory is summarised, not truncated.** `MemorySettings.summarize_after_turns` had been
 in the schema since Milestone 1 with nothing implementing it: history was trimmed to the
 last N exchanges and everything older was gone. That failure is invisible in testing,

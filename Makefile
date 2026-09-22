@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 PY ?= python3
 
-.PHONY: help install install-preprocess test test-fast demo validate lint clean
+.PHONY: help install install-preprocess test test-fast demo talk audition validate lint clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -21,6 +21,14 @@ test-fast: ## Skip the slower end-to-end benchmark tests
 
 demo: ## Build the synthetic pack, run the benchmark, build a blind test, aggregate
 	$(PY) -m cvai_evaluation.cli demo
+
+talk: ## Talk to the synthetic demo character offline (no key, no GPU, no network)
+	@test -d voicepacks/demo_zh || $(MAKE) demo
+	CVAI_LLM=mock $(PY) -m cvai_api.talk_cli demo_zh
+
+audition: ## Speak one line per style and write a page to listen through
+	@test -d voicepacks/demo_zh || $(MAKE) demo
+	CVAI_LLM=mock $(PY) -m cvai_api.talk_cli demo_zh --audition
 
 validate: ## Validate every voice pack in the repository
 	$(PY) -m cvai_core.cli.voicepack_cli list

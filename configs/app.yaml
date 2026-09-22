@@ -109,8 +109,12 @@ providers:
           device: ${CVAI_ASR_DEVICE:-cpu}
 
   llm:
-    active: openai
+    active: ${CVAI_LLM:-openai}
     instances:
+      # Scripted replies, no key and no network — `CVAI_LLM=mock cvai-talk demo_zh`
+      # exercises the whole pipeline offline. It is not a language model and says so.
+      mock:
+        type: mock
       openai:
         type: openai
         options:

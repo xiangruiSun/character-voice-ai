@@ -10,6 +10,20 @@ rest is worth doing.
 
 ---
 
+## Before any of it: see what you are building
+
+```bash
+make install && make talk        # or: make audition
+```
+
+No API key, no GPU, no network, no character audio. A scripted LLM stands in for her
+brain and the mock engine for her voice; everything between them — performance planning,
+Chinese text normalization, chunking, reference retrieval, synthesis, playback — is the
+real pipeline. It sounds like tones, because the "voice pack" is generated tones. What it
+shows is the shape of the thing you are about to spend a weekend collecting audio for.
+
+---
+
 ## 0. What you need before you start
 
 | | Minimum | Comfortable | Why it matters |
