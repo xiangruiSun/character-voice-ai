@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .funasr_stt import FunASRSTTProvider
 from .openai_stt import OpenAISTTProvider
 
-__all__ = ["OpenAISTTProvider"]
+__all__ = ["FunASRSTTProvider", "OpenAISTTProvider"]

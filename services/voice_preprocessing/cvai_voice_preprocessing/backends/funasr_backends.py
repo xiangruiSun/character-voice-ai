@@ -102,9 +102,11 @@ class FunASRTranscriber(ASRBackend):
         device: str = "cpu",
         batch_size_s: int = 300,
         disable_update: bool = True,
+        hotword_weight: int = 20,
     ) -> None:
         self.model_id = model
         self.punc_model = punc_model
+        self.hotword_weight = hotword_weight
         # VAD is off by default here: the pipeline has already segmented, and a second
         # pass would re-split a clip that a human is about to review as one unit.
         self.vad_model = vad_model
@@ -140,7 +142,9 @@ class FunASRTranscriber(ASRBackend):
         kwargs: dict[str, Any] = {"input": str(path), "batch_size_s": self.batch_size_s}
         if hotwords:
             # paraformer takes "word weight word weight …"; 20 is the usual weight.
-            kwargs["hotword"] = " ".join(f"{word} 20" for word in hotwords)
+            kwargs["hotword"] = " ".join(
+                f"{word} {self.hotword_weight}" for word in hotwords
+            )
 
         raw = model.generate(**kwargs)
         payload = _first(raw)

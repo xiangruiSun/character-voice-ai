@@ -194,11 +194,14 @@ def manager(tmp_path: Path, demo_pack, repo_root_path: Path, monkeypatch):
             ),
         }
     )
+    from test_listening import FakeSTT
+
     return SessionManager(
         config=config,
         audio_root=tmp_path / "audio",
         tts_factory=lambda cfg, name: MockTTSProvider(sample_rate=16000),
         llm_factory=lambda cfg, name: FakeLLM(),
+        stt_factory=lambda cfg, name: FakeSTT("外面下雨了吗"),
     )
 
 
@@ -386,3 +389,116 @@ def test_websocket_for_an_unknown_session_reports_and_closes(client):
     with client.websocket_connect("/sessions/nope/ws") as socket:
         payload = json.loads(socket.receive()["text"])
     assert payload["type"] == "error"
+
+
+# --------------------------------------------------------------------------------------
+# The microphone path (Milestone 11)
+# --------------------------------------------------------------------------------------
+#
+# The upstream half of the socket: raw 16-bit PCM in, a spoken turn out. The audio is
+# synthetic (a tone between two stretches of room noise), because what is being tested
+# here is the wiring — that binary frames reach the listener, that endpointing starts a
+# turn, and that the transcript is echoed back — not the acoustics, which
+# `test_listening.py` covers.
+
+
+def _mic_frames() -> list[bytes]:
+    from test_listening import floats_to_pcm16, room_noise, silence, tone
+    from cvai_conversation import ListenerConfig
+
+    config = ListenerConfig()
+    return [
+        floats_to_pcm16(room_noise(400)),
+        floats_to_pcm16(tone(700)),
+        floats_to_pcm16(silence(config.silence_end_ms + 100)),
+    ]
+
+
+def _collect(socket, limit: int = 80) -> tuple[list[dict], int]:
+    messages, audio_frames = [], 0
+    for _ in range(limit):
+        message = socket.receive()
+        if message.get("bytes"):
+            audio_frames += 1
+            continue
+        payload = json.loads(message["text"])
+        messages.append(payload)
+        if payload["type"] == "turn_end":
+            break
+    return messages, audio_frames
+
+
+def test_speaking_into_the_socket_runs_a_turn(client):
+    session_id = client.post("/sessions", json={}).json()["session_id"]
+
+    with client.websocket_connect(f"/sessions/{session_id}/ws") as socket:
+        socket.send_text(json.dumps({"type": "user_audio_begin", "sample_rate": 16000}))
+        for frame in _mic_frames():
+            socket.send_bytes(frame)
+        messages, audio_frames = _collect(socket)
+
+    kinds = [message["type"] for message in messages]
+    assert kinds[0] == "transcript"
+    assert messages[0]["text"] == "外面下雨了吗"
+    assert "character_text" in kinds
+    assert kinds[-1] == "turn_end"
+    assert audio_frames >= 1
+
+
+def test_microphone_frames_before_user_audio_begin_are_ignored(client):
+    """A page that starts streaming before saying so must not open a turn.
+
+    Not pedantry: the capture node runs for a moment after the mic is switched off, and
+    those frames arriving as a new utterance would have the character answer nothing.
+    """
+    session_id = client.post("/sessions", json={}).json()["session_id"]
+
+    with client.websocket_connect(f"/sessions/{session_id}/ws") as socket:
+        for frame in _mic_frames():
+            socket.send_bytes(frame)
+        # Nothing should have been produced, so a typed turn is the next thing heard.
+        socket.send_text(json.dumps({"type": "user_text", "text": "在吗"}))
+        messages, _ = _collect(socket)
+
+    assert [m for m in messages if m["type"] == "transcript"] == []
+    assert messages[-1]["type"] == "turn_end"
+
+
+def test_ending_the_audio_stream_flushes_a_part_spoken_utterance(client):
+    """Push-to-talk: releasing the button ends the utterance without the silence timer."""
+    from test_listening import floats_to_pcm16, room_noise, tone
+
+    session_id = client.post("/sessions", json={}).json()["session_id"]
+
+    with client.websocket_connect(f"/sessions/{session_id}/ws") as socket:
+        socket.send_text(json.dumps({"type": "user_audio_begin", "sample_rate": 16000}))
+        socket.send_bytes(floats_to_pcm16(room_noise(400)))
+        socket.send_bytes(floats_to_pcm16(tone(700)))
+        socket.send_text(json.dumps({"type": "user_audio_end"}))
+        messages, _ = _collect(socket)
+
+    assert messages[0]["type"] == "transcript"
+    assert messages[-1]["type"] == "turn_end"
+
+
+def test_a_session_without_speech_to_text_says_so(manager: SessionManager):
+    """The microphone is the only thing that needs STT, so its absence is only an
+    error for the user who speaks — a typed conversation must still work."""
+    from fastapi.testclient import TestClient
+
+    from cvai_api.app import create_app
+    from cvai_core.errors import CVAIError
+
+    manager.stt_factory = None
+    manager.config = manager.config.model_copy(
+        update={"providers": manager.config.providers.model_copy(update={"stt": None})}
+    )
+
+    with TestClient(create_app(manager)) as test_client:
+        session_id = test_client.post("/sessions", json={}).json()["session_id"]
+        session = manager.get(session_id)
+        with pytest.raises(CVAIError, match="speech-to-text"):
+            session.voice_loop()
+        # Typing still works.
+        turn = test_client.post(f"/sessions/{session_id}/turn", json={"text": "在吗"})
+        assert turn.status_code == 200

@@ -8,6 +8,15 @@ stream.
 
 from __future__ import annotations
 
+from .listening import (
+    ListenerConfig,
+    ListenerEvent,
+    UtteranceDetector,
+    VoiceLoop,
+    estimate_frames,
+    floats_to_pcm16,
+    pcm16_to_floats,
+)
 from .orchestrator import (
     PLAN_MODE_COMPLETE,
     PLAN_MODE_STREAMING,
@@ -21,10 +30,17 @@ from .state_machine import InvalidTransition, StateMachine
 __all__ = [
     "ConversationOrchestrator",
     "InvalidTransition",
+    "ListenerConfig",
+    "ListenerEvent",
     "OrchestratorConfig",
     "PLAN_MODE_COMPLETE",
     "PLAN_MODE_STREAMING",
     "StateMachine",
     "TurnContext",
+    "UtteranceDetector",
+    "VoiceLoop",
+    "estimate_frames",
+    "floats_to_pcm16",
+    "pcm16_to_floats",
     "plan_summary",
 ]

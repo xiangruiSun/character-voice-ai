@@ -208,9 +208,48 @@ deliberately drops the performance metadata — spec §12 says the user only see
 and not sending emotion or reference style to the browser means no frontend can start
 displaying or deciding it.
 
-**Milestone 11 (microphone + STT) is the remaining piece.** The `SpeechToTextProvider`
-interface, the audio protocol's upstream messages and the orchestrator's interrupt path
-are all in place; what is missing is browser capture and wiring `submit_audio`.
+## Milestone 11 — Microphone and Speech-to-Text ✅
+
+The upstream half of the conversation. The browser captures 16 kHz mono PCM through an
+AudioWorklet and streams it raw up the same WebSocket; **every decision is made on the
+server**, per spec §15. A browser-side VAD would be a second state machine, and two state
+machines drift.
+
+`UtteranceDetector` (`cvai_conversation.listening`) answers three questions frame by
+frame, and the thresholds encode which mistakes cost more:
+
+| Question | Rule | Why that way |
+|---|---|---|
+| Has the user started? | 3 consecutive voiced frames | one frame is a door closing |
+| Have they finished? | 700 ms of trailing silence | shorter and the character talks over a pause for breath |
+| Are they talking over her? | 5 voiced frames during playback | a false positive costs a cut-off reply; a miss means the user is talked over, which is the thing that most reliably breaks the illusion |
+
+Three details that are not obvious until something sounds wrong:
+
+* **The pre-roll ring.** Speech is declared several frames after it began, so the frames
+  that triggered the decision are held and flushed into the utterance. Losing 60 ms of a
+  Mandarin initial is enough to turn 四 into 是. It is a *ring*, not a growing buffer, so
+  a cough heard at the start of a 20 s reply is not glued onto the front of whatever the
+  user eventually says.
+* **The noise floor does not track speech.** An earlier version adapted on every frame,
+  and a long uninterrupted sentence pulled the floor to within the margin of the
+  speaker's own voice: after about a second and a half, speech read as silence and the
+  character began answering halfway through. Found by a test, not by listening.
+* **Intake is separable from response.** `observe()` is ordered and microsecond-cheap;
+  `respond()` runs ASR, an LLM and a TTS engine. A transport that ran them together would
+  stop reading the microphone for exactly as long as the reply takes — which is precisely
+  the window barge-in exists for.
+
+STT has two adapters. OpenAI is the default; **FunASR (`paraformer-zh`) is the better one
+once the weights are local** — trained for Mandarin rather than for everything, takes real
+weighted hotwords so the character's name is recognised rather than guessed at, and keeps
+the user's microphone off someone else's server. It borrows the loader from the Voice Pack
+preprocessing backends so the ASR that transcribed the training data is the ASR that hears
+the user.
+
+Echo cancellation is the browser's `echoCancellation` constraint plus headphones. Without
+it, open speakers make the character barge in on her own voice. Anything more belongs in
+WebRTC, not in this loop.
 
 ## Milestone 14 — Additional Voice Packs
 

@@ -17,20 +17,30 @@ product around the winner. `docs/IMPLEMENTATION_PLAN.md` has the full sequence.
 
 ## Current status
 
-**Milestones 1 and 2 are complete.**
+**Everything that can be built without model weights is built.** You can hold a spoken
+Chinese conversation with a character today, end to end — microphone in, her voice out —
+using the mock engine.
 
-* **M1** — repository architecture, provider interfaces, configuration system, Character
-  and Voice Pack schemas, and a working benchmark pipeline.
-* **M2** — the Voice Pack preprocessing pipeline: resumable stages from raw audio to an
-  approved, annotated dataset and Reference Bank, with a human review loop.
+| Milestone | State |
+|---|---|
+| M1 — architecture, interfaces, config, schemas, benchmark pipeline | ✅ |
+| M2 — Voice Pack preprocessing, from raw audio to an approved dataset | ✅ |
+| M3–M5 — per-engine dataset exporters, sidecars, training runbooks | scaffolded; needs a GPU |
+| M6 — objective metrics: prosody compared against the character herself | ✅ |
+| M7 — **choose the engine** | blocked on real character audio and a GPU |
+| M8 — Character Brain, Speech Planner, Chinese text front-end | ✅ |
+| M9, M10, M12, M13 — conversation orchestrator, API, streaming, barge-in | ✅ |
+| M11 — microphone capture, server-side endpointing, speech-to-text | ✅ |
+| M14 — a second character | after 1–13, and it should need no code |
 
-Both run with **no GPU, no model weights and no network** — only `pydantic` and
-`PyYAML`. That is deliberate: the apparatus that will answer the research question has to
-be trustworthy before a real engine is plugged into it.
+The whole apparatus runs with **no GPU, no model weights and no network** — only
+`pydantic` and `PyYAML`. That is deliberate: the machinery that will answer the research
+question has to be trustworthy before a real engine is plugged into it, and every
+model-backed stage reports its own absence rather than silently producing nothing.
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 143 tests
+make test        # 392 tests
 make demo        # full benchmark pipeline on a synthetic pack with the mock engine
 ```
 
@@ -131,6 +141,11 @@ cvai-prep build denia_cn                            # clean/ + dataset + referen
 cvai-bench run configs/benchmarks/denia_cn_v1.yaml
 cvai-bench blind runs/<run_id> --webmushra
 cvai-bench aggregate runs/<run_id> --ratings ratings/
+
+# Talk to her (Milestones 9-13)
+pip install -e '.[runtime]'
+uvicorn cvai_api.app:app --port 8000
+open apps/web/dev-client.html          # type, or press 开麦 and speak
 ```
 
 Configuration layers: `configs/app.yaml`, then `CVAI__section__key` environment

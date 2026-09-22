@@ -18,6 +18,11 @@ Endpoints:
 
 The REST turn endpoint exists because it is the fastest way to check a whole pipeline —
 character, planner, normalizer, chunker, retriever, engine — with `curl` and no browser.
+
+The WebSocket carries both directions of audio. Downstream: rendered WAV chunks, each
+bracketed by an ``audio_begin``/``audio_end`` pair. Upstream: raw little-endian 16-bit
+PCM at 16 kHz from the microphone, between ``user_audio_begin`` and ``user_audio_end``
+(Milestone 11). Endpointing and barge-in are decided server-side, per spec §15.
 """
 
 from __future__ import annotations
@@ -180,18 +185,22 @@ def create_app(
 
         orchestrator = session.orchestrator
         turn_task: asyncio.Task | None = None
+        listening = False
+
+        async def emit(event) -> None:
+            for message in to_server_messages(event):
+                await socket.send_text(
+                    json.dumps(message.model_dump(mode="json"), ensure_ascii=False)
+                )
+            if event.type is TurnEventType.AUDIO and event.audio_path:
+                # Binary frames follow their AudioBegin, so the client knows the
+                # format before the bytes arrive.
+                await socket.send_bytes(Path(event.audio_path).read_bytes())
 
         async def run(text: str) -> None:
             try:
                 async for event in orchestrator.run_turn(text):
-                    for message in to_server_messages(event):
-                        await socket.send_text(
-                            json.dumps(message.model_dump(mode="json"), ensure_ascii=False)
-                        )
-                    if event.type is TurnEventType.AUDIO and event.audio_path:
-                        # Binary frames follow their AudioBegin, so the client knows the
-                        # format before the bytes arrive.
-                        await socket.send_bytes(Path(event.audio_path).read_bytes())
+                    await emit(event)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -200,9 +209,62 @@ def create_app(
                     json.dumps({"type": "error", "code": "turn_failed", "message": str(exc)})
                 )
 
+        async def speak_for(samples) -> None:
+            """Transcribe one captured utterance and run the turn it asks for."""
+            try:
+                async for event in session.voice_loop().respond(samples):
+                    await emit(event)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                log.exception("voice turn failed")
+                await socket.send_text(
+                    json.dumps({"type": "error", "code": "voice_failed", "message": str(exc)})
+                )
+
+        async def supersede() -> None:
+            """Stop whatever the character is doing, because a new turn is starting."""
+            nonlocal turn_task
+            if turn_task and not turn_task.done():
+                await orchestrator.interrupt(
+                    InterruptSignal(reason=InterruptReason.NEW_TURN)
+                )
+                await asyncio.gather(turn_task, return_exceptions=True)
+
         try:
             while True:
-                raw = await socket.receive_text()
+                message = await socket.receive()
+                if message.get("type") == "websocket.disconnect":
+                    break
+
+                data = message.get("bytes")
+                if data is not None:
+                    # Microphone PCM. Classification happens inline — the frames are
+                    # ordered, the detector is not re-entrant, and a 20 ms frame costs
+                    # microseconds. The turn it may start is slow, so that becomes a
+                    # task and the loop goes straight back to reading the microphone;
+                    # otherwise there would be nobody listening during the reply, which
+                    # is precisely when barge-in has to work.
+                    if not listening:
+                        continue
+                    try:
+                        utterances = await session.voice_loop().observe(data)
+                    except CVAIError as exc:
+                        listening = False
+                        await socket.send_text(
+                            json.dumps(
+                                {"type": "error", "code": "no_stt", "message": str(exc)}
+                            )
+                        )
+                        continue
+                    for utterance in utterances:
+                        await supersede()
+                        turn_task = asyncio.create_task(speak_for(utterance))
+                    continue
+
+                raw = message.get("text")
+                if raw is None:
+                    continue
                 try:
                     payload = json.loads(raw)
                 except json.JSONDecodeError:
@@ -213,12 +275,24 @@ def create_app(
                     # A new turn supersedes the old one. Interrupting rather than
                     # queueing is what makes the character feel responsive instead of
                     # finishing a sentence nobody is listening to any more.
-                    if turn_task and not turn_task.done():
-                        await orchestrator.interrupt(
-                            InterruptSignal(reason=InterruptReason.NEW_TURN)
-                        )
-                        await asyncio.gather(turn_task, return_exceptions=True)
+                    await supersede()
                     turn_task = asyncio.create_task(run(payload.get("text", "")))
+
+                elif kind == "user_audio_begin" or kind == "start_listening":
+                    listening = True
+                    with contextlib.suppress(CVAIError):
+                        session.voice_loop().reset()
+
+                elif kind == "user_audio_end" or kind == "stop_listening":
+                    listening = False
+                    try:
+                        loop = session.voice_loop()
+                    except CVAIError:
+                        continue
+                    # A released button is a fact; the silence timer is a guess.
+                    for utterance in loop.end_utterance():
+                        await supersede()
+                        turn_task = asyncio.create_task(speak_for(utterance))
 
                 elif kind == "interrupt":
                     await orchestrator.interrupt(

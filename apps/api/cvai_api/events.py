@@ -25,6 +25,7 @@ from cvai_audio_protocol import (
     ErrorMessage,
     ServerMessage,
     StateChanged,
+    TranscriptMessage,
     TurnEnd,
 )
 from cvai_types import TurnEvent, TurnEventType
@@ -36,6 +37,12 @@ def to_server_messages(event: TurnEvent) -> list[ServerMessage]:
         return [
             StateChanged(state=event.state, turn_id=event.turn_id, detail=event.detail)
         ]
+
+    if event.type is TurnEventType.TRANSCRIPT:
+        # What the server heard, echoed back. Not a nicety: when ASR mishears a name,
+        # the character's reply looks unhinged until you can see *why*, and the user
+        # can correct it by saying it again instead of assuming the character is broken.
+        return [TranscriptMessage(text=event.text, is_final=event.is_final)]
 
     if event.type is TurnEventType.TEXT_DELTA:
         return [

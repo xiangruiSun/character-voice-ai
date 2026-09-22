@@ -91,13 +91,22 @@ providers:
           engine_version: VoxCPM2
 
   stt:
-    active: openai
+    active: ${CVAI_STT:-openai}
     instances:
       openai:
         type: openai
         options:
           model: gpt-4o-transcribe
           api_key: ${OPENAI_API_KEY:-}
+      # Local Mandarin ASR. Better than Whisper-family models on short Chinese
+      # utterances, takes real weighted hotwords for character names, and keeps the
+      # user's microphone off someone else's server. Needs `.[preprocess]`.
+      funasr:
+        type: funasr
+        options:
+          model: paraformer-zh
+          punctuation_model: ct-punc
+          device: ${CVAI_ASR_DEVICE:-cpu}
 
   llm:
     active: openai

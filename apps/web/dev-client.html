@@ -18,6 +18,13 @@
     2. The user sees text and hears audio — nothing else. The performance metadata
        (emotion, intensity, reference style) is not sent to the browser at all, so there
        is nothing here to accidentally display or act on (spec §12).
+
+  Microphone capture (Milestone 11) follows the same rules. The page streams raw 16 kHz
+  PCM up the socket and does *no* endpointing of its own: when speech started, when it
+  ended, and whether the user is talking over the character are all decided on the
+  server. A browser-side VAD would be a second state machine, and two state machines
+  drift. `echoCancellation` is on, because without it open speakers make the character
+  interrupt herself.
 -->
 <style>
   :root {
@@ -98,6 +105,7 @@
     <span class="badge" id="conn">未连接</span>
     <span class="badge" id="state">idle</span>
     <span class="badge" id="engine">—</span>
+    <span class="badge" id="mic">麦克风关闭</span>
   </div>
 
   <div class="log" id="log"></div>
@@ -105,11 +113,12 @@
 
 <div class="bar">
   <div class="inner">
+    <button id="talk" class="ghost" disabled title="开启麦克风，由服务端判断说完没有">🎤 开麦</button>
     <input id="text" placeholder="说点什么…" disabled autocomplete="off">
     <button id="send" disabled>发送</button>
     <button id="stop" class="ghost" disabled title="打断当前回答">打断</button>
   </div>
-  <div class="hint">Enter 发送 · Esc 打断（barge-in）</div>
+  <div class="hint">Enter 发送 · Esc 打断（barge-in）· 开麦后直接说话即可打断</div>
 </div>
 
 <script>
@@ -151,6 +160,7 @@
     $("text").disabled = !on;
     $("send").disabled = !on;
     $("stop").disabled = !on;
+    $("talk").disabled = !on;
     $("hangup").disabled = !on;
     $("connect").disabled = on;
   }
@@ -177,6 +187,124 @@
   function drain() {
     queue = [];
     if (playing) { playing.pause(); playing = null; }
+  }
+
+  // -- microphone ------------------------------------------------------------
+  //
+  // Captured at 16 kHz mono and sent as raw little-endian 16-bit PCM between
+  // `user_audio_begin` and `user_audio_end`. No VAD here on purpose (see the comment
+  // at the top of this file): the server owns endpointing and barge-in.
+
+  const MIC_RATE = 16000;
+
+  // An AudioWorklet runs on the audio thread, so capture is not interrupted by the
+  // main thread doing layout — which is what makes ScriptProcessorNode drop frames
+  // and, in a voice UI, swallow the first syllable of every sentence.
+  const CAPTURE_WORKLET = `
+    class Capture extends AudioWorkletProcessor {
+      constructor() { super(); this.held = []; this.count = 0; }
+      process(inputs) {
+        const channel = inputs[0] && inputs[0][0];
+        if (!channel) return true;
+        this.held.push(new Float32Array(channel));
+        this.count += channel.length;
+        // ~64 ms per message. Small enough that barge-in stays responsive, large
+        // enough not to post 375 messages a second.
+        if (this.count >= 1024) {
+          const out = new Float32Array(this.count);
+          let at = 0;
+          for (const block of this.held) { out.set(block, at); at += block.length; }
+          this.held = []; this.count = 0;
+          this.port.postMessage(out, [out.buffer]);
+        }
+        return true;
+      }
+    }
+    registerProcessor("capture", Capture);
+  `;
+
+  let micStream = null, micContext = null, micNode = null;
+
+  function setMic(on, label) {
+    $("mic").textContent = label;
+    $("mic").className = "badge" + (on ? " live" : "");
+    $("talk").textContent = on ? "🎤 关麦" : "🎤 开麦";
+  }
+
+  function resample(samples, from, to) {
+    if (from === to) return samples;
+    const ratio = from / to;
+    const out = new Float32Array(Math.floor(samples.length / ratio));
+    for (let i = 0; i < out.length; i++) {
+      const position = i * ratio;
+      const left = Math.floor(position);
+      const right = Math.min(left + 1, samples.length - 1);
+      const weight = position - left;
+      out[i] = samples[left] * (1 - weight) + samples[right] * weight;
+    }
+    return out;
+  }
+
+  function sendPcm(samples, rate) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    const resampled = resample(samples, rate, MIC_RATE);
+    const pcm = new Int16Array(resampled.length);
+    for (let i = 0; i < resampled.length; i++) {
+      const clamped = Math.max(-1, Math.min(1, resampled[i]));
+      pcm[i] = Math.round(clamped * 32767);
+    }
+    socket.send(pcm.buffer);
+  }
+
+  async function micOn() {
+    if (!socket) return;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          // Without echo cancellation, open speakers make the character hear herself
+          // and barge-in fires on her own voice. Headphones solve it too; this does
+          // not require the user to own any.
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      micContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: MIC_RATE });
+      await micContext.audioWorklet.addModule(
+        URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: "application/javascript" }))
+      );
+      micNode = new AudioWorkletNode(micContext, "capture");
+      micNode.port.onmessage = (event) => sendPcm(event.data, micContext.sampleRate);
+      micContext.createMediaStreamSource(micStream).connect(micNode);
+      // A worklet is only pulled if it reaches the destination, so it goes through a
+      // silent gain rather than nowhere.
+      const sink = micContext.createGain();
+      sink.gain.value = 0;
+      micNode.connect(sink).connect(micContext.destination);
+
+      socket.send(JSON.stringify({ type: "user_audio_begin", sample_rate: MIC_RATE }));
+      setMic(true, "麦克风开启");
+      bubble("sys", "麦克风已开启，直接说话即可（说完自动送出）");
+    } catch (error) {
+      bubble("err", "无法使用麦克风：" + error.message);
+      await micOff();
+    }
+  }
+
+  async function micOff() {
+    if (socket && socket.readyState === WebSocket.OPEN && micNode) {
+      // Tell the server the user stopped, rather than leaving it to time out.
+      socket.send(JSON.stringify({ type: "user_audio_end" }));
+    }
+    if (micNode) { micNode.port.onmessage = null; micNode.disconnect(); micNode = null; }
+    if (micStream) { micStream.getTracks().forEach((track) => track.stop()); micStream = null; }
+    if (micContext) { await micContext.close().catch(() => {}); micContext = null; }
+    setMic(false, "麦克风关闭");
+  }
+
+  function toggleMic() {
+    return micStream ? micOff() : micOn();
   }
 
   // -- session ---------------------------------------------------------------
@@ -213,7 +341,7 @@
       socket = new WebSocket(url);
       socket.binaryType = "blob";
       socket.onopen = () => setConnected(true, "已连接");
-      socket.onclose = () => { setConnected(false, "已断开"); socket = null; };
+      socket.onclose = () => { setConnected(false, "已断开"); socket = null; micOff(); };
       socket.onerror = () => bubble("err", "WebSocket 错误");
       socket.onmessage = onMessage;
     } catch (error) {
@@ -233,6 +361,11 @@
         // Rule 1: the page displays server state; it never decides it.
         setState(message.state);
         if (message.state === "interrupted") drain();
+        break;
+      case "transcript":
+        // What the server heard. Shown so that a misheard name is visibly the
+        // recogniser's fault rather than the character behaving strangely.
+        bubble("user", message.text);
         break;
       case "character_text":
         if (!herBubble || herBubble.dataset.turn !== message.turn_id) {
@@ -273,6 +406,7 @@
 
   async function hangup() {
     drain();
+    await micOff();
     if (socket) { socket.send(JSON.stringify({ type: "bye" })); socket.close(); }
     if (sessionId) {
       try {
@@ -290,6 +424,7 @@
   $("hangup").addEventListener("click", hangup);
   $("send").addEventListener("click", send);
   $("stop").addEventListener("click", interrupt);
+  $("talk").addEventListener("click", toggleMic);
   $("text").addEventListener("keydown", function (event) {
     if (event.key === "Enter") { event.preventDefault(); send(); }
   });
@@ -299,6 +434,7 @@
 
   loadCharacters();
   setConnected(false, "未连接");
+  setMic(false, "麦克风关闭");
 })();
 </script>
 </body>
