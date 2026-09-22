@@ -1,5 +1,8 @@
 # Character Voice AI (Chinese, V1)
 
+**Author:** andersonmork817 · MIT licensed (code only — see `LICENSE` for what that does
+and does not cover)
+
 Build a **character-specific** Chinese voice — not generic TTS, and not ten-second
 zero-shot cloning. The target is that someone who knows the character could plausibly
 mistake a generated line for a new recording of her.

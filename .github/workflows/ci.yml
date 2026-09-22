@@ -1,0 +1,46 @@
+name: tests
+
+# The whole suite runs with no GPU, no model weights and no network, which is the point:
+# CI can prove the machinery is sound long before an engine is chosen (Milestone 7).
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the floor declared in pyproject; 3.12 is what most contributors have.
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          # `dev` and `runtime` only: the preprocessing and text front-end extras pull
+          # torch and model downloads, and every stage that needs them already reports
+          # its own absence rather than failing.
+          pip install -e ".[dev,runtime]"
+
+      - name: Syntax check
+        run: python -m compileall -q packages services providers scripts tests
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Benchmark pipeline end to end
+        # Generation, blind test, aggregation and both reports on a synthetic pack with
+        # the mock engine. Catches the wiring failures unit tests cannot see.
+        run: python -m cvai_evaluation.cli demo
