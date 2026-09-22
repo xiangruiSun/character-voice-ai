@@ -231,10 +231,25 @@
     $("talk").textContent = on ? "🎤 关麦" : "🎤 开麦";
   }
 
+  // Normally a no-op: the AudioContext is asked for 16 kHz and the browser resamples
+  // properly on the way in. This is the fallback for browsers that ignore the request.
   function resample(samples, from, to) {
     if (from === to) return samples;
     const ratio = from / to;
     const out = new Float32Array(Math.floor(samples.length / ratio));
+    if (ratio > 1.5) {
+      // Averaging the window rather than picking one sample out of three. Plain
+      // decimation would fold everything above 8 kHz back down into the speech band
+      // as a metallic buzz, and ASR hears that as clearly as a person does.
+      for (let i = 0; i < out.length; i++) {
+        const start = Math.floor(i * ratio);
+        const stop = Math.min(Math.floor((i + 1) * ratio), samples.length);
+        let total = 0;
+        for (let n = start; n < stop; n++) total += samples[n];
+        out[i] = stop > start ? total / (stop - start) : 0;
+      }
+      return out;
+    }
     for (let i = 0; i < out.length; i++) {
       const position = i * ratio;
       const left = Math.floor(position);
