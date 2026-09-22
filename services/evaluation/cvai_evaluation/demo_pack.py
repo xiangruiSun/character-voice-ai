@@ -38,6 +38,11 @@ from cvai_types import (
 
 SAMPLE_RATE = 24000
 
+#: Lead-in room tone in the synthetic "original recordings", and therefore the offset at
+#: which each reference sits inside its source. Gives the null-processing control (D7)
+#: something real to cut.
+_RAW_LEAD_S = 0.4
+
 #: style -> (base F0, clips, transcripts). Different pitches per style so retrieval and
 #: rotation are audible in the demo rather than merely logged.
 _STYLE_SPEC: dict[str, tuple[float, list[str]]] = {
@@ -96,6 +101,20 @@ def build_demo_voicepack(root: Path, *, overwrite: bool = True) -> VoicePackPath
             relative = f"references/{style}/{reference_id}.wav"
             duration = 3.5 + 0.7 * index
             _write_tone(paths.root / relative, base_f0 + index * 6.0, duration)
+
+            # The "original recording" this reference was supposedly cut from: the same
+            # line with lead-in room noise, a lower level and hiss over it. The pack
+            # therefore has a real null-processing control (D7) to exercise — the
+            # unprocessed candidate hears this, the normal candidate hears the clip
+            # above, and everything else about them is identical.
+            raw_relative = f"raw/{reference_id}.wav"
+            _write_raw_source(
+                paths.root / raw_relative,
+                base_f0 + index * 6.0,
+                duration,
+                lead_s=_RAW_LEAD_S,
+            )
+
             references.append(
                 ReferenceSample(
                     reference_id=reference_id,
@@ -107,6 +126,8 @@ def build_demo_voicepack(root: Path, *, overwrite: bool = True) -> VoicePackPath
                         sample_rate=SAMPLE_RATE, channels=1, duration_s=duration
                     ),
                     quality_score=0.95 - 0.03 * index,
+                    source_clip=raw_relative,
+                    source_offset_s=_RAW_LEAD_S,
                     tags=["synthetic"],
                 )
             )
@@ -182,7 +203,26 @@ def build_demo_voicepack(root: Path, *, overwrite: bool = True) -> VoicePackPath
     return paths
 
 
-def _write_tone(path: Path, f0: float, duration_s: float) -> None:
+def _write_raw_source(path: Path, f0: float, duration_s: float, *, lead_s: float) -> None:
+    """The same line as it would have arrived: quieter, hissy, with lead-in room tone.
+
+    Deterministic noise rather than `random`, so two runs of the demo produce byte-equal
+    packs and a diff in a benchmark result means something changed in the code.
+    """
+    tone = _tone_samples(f0, duration_s)
+    lead = int(lead_s * SAMPLE_RATE)
+    tail = int(0.25 * SAMPLE_RATE)
+    total = lead + len(tone) + tail
+
+    samples: list[float] = []
+    for n in range(total):
+        hiss = 0.012 * (((n * 7919) % 2003) / 1001.5 - 1.0)
+        voice = tone[n - lead] * 0.72 if lead <= n < lead + len(tone) else 0.0
+        samples.append(voice + hiss)
+    write_wav(path, samples, SAMPLE_RATE)
+
+
+def _tone_samples(f0: float, duration_s: float) -> list[float]:
     """A short vowel-ish tone with a fade, so players do not click."""
     total = int(duration_s * SAMPLE_RATE)
     fade = int(0.02 * SAMPLE_RATE)
@@ -203,4 +243,8 @@ def _write_tone(path: Path, f0: float, duration_s: float) -> None:
         elif n > total - fade:
             value *= max(0.0, (total - n) / fade)
         samples.append(value * 0.5)
-    write_wav(path, samples, SAMPLE_RATE)
+    return samples
+
+
+def _write_tone(path: Path, f0: float, duration_s: float) -> None:
+    write_wav(path, _tone_samples(f0, duration_s), SAMPLE_RATE)

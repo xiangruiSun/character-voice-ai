@@ -37,8 +37,17 @@ the breaths, aspiration, soft consonants and vocal fry that *are* the character.
 
 > Remove interference that hurts training, but preserve the voice actor's performance.
 
-Keep a **null-processing control set** — a handful of clips that skipped every optional
-stage — so "did cleaning help?" is a question with an answer.
+The **null-processing control** makes that testable rather than merely recorded. Every
+`ReferenceSample` carries `source_clip` and `source_offset_s` — which original recording
+it was cut from, and where — so the benchmark can rebuild the untouched version of the
+same clip and run it as a candidate (`reference_source: unprocessed`). Same lines, same
+styles, same seeds, no cleaning: whatever the listening test hears between the two is the
+processing chain.
+
+This is why rule 1 matters in practice. Delete `raw/` and the control becomes
+impossible — the run will refuse rather than substitute the cleaned clips, which is the
+correct behaviour and also a permanent loss of the only evidence about your own
+preprocessing.
 
 **3. Reference clips carry their transcript.** Qwen3-TTS (`ref_text`), Fish Speech
 (`--prompt-text`) and VoxCPM2 require it; GPT-SoVITS (`prompt_text`) improves sharply

@@ -40,6 +40,25 @@ candidates:
     commercial_use: true
     notes: Baseline for the fine-tuned row below.
 
+  # The null-processing control (decision D7). The same engine and mode as the row
+  # above, conditioned on reference clips cut straight from the original recordings
+  # rather than the cleaned ones. Everything else is identical, so a difference in the
+  # listening test is the cleaning chain and nothing else.
+  #
+  # Keep it enabled. "Did our preprocessing preserve her or sand her down?" has no other
+  # answer, and by the time the product exists it is far too late to ask.
+  - candidate_id: gpt_sovits_v4_zs_unprocessed
+    engine: gpt_sovits
+    adaptation_mode: zero_shot
+    display_name: GPT-SoVITS v4 (zero-shot, unprocessed references — control)
+    reference_source: unprocessed
+    license: MIT
+    commercial_use: true
+    notes: >
+      Needs raw/ present and the pack built with provenance. The run refuses rather
+      than silently falling back to the cleaned clips — a control that quietly becomes
+      a copy of what it controls for is worse than no control.
+
   - candidate_id: gpt_sovits_v4_ft
     engine: gpt_sovits
     adaptation_mode: finetuned

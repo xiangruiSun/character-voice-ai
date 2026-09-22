@@ -859,6 +859,10 @@ def _build_reference_bank(
                     core_style=core,
                     audio=sample.audio,
                     quality_score=sample.quality_score,
+                    # Provenance, so the benchmark can rebuild this exact reference
+                    # from the untouched original and run it as a control (D7).
+                    source_clip=sample.source_clip,
+                    source_offset_s=sample.source_offset_s,
                     tags=_reference_tags(sample),
                 )
             )

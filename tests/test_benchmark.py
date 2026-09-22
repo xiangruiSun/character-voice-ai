@@ -300,3 +300,84 @@ def test_adaptation_mode_unsupported_by_the_engine_is_skipped(bench_env, monkeyp
     run = asyncio.run(bench_env.run())
     assert all(not r.succeeded for r in run.records)
     assert "adaptation mode" in (run.records[0].error or "")
+
+
+# --------------------------------------------------------------------------------------
+# The null-processing control (decision D7)
+# --------------------------------------------------------------------------------------
+
+
+def _add_control_candidate(bench_env, **overrides):
+    """Clone Mock A as a control conditioned on unprocessed references."""
+    from cvai_types import BenchmarkCandidate
+
+    control = BenchmarkCandidate(
+        candidate_id="mock_a_unprocessed",
+        engine="mock",
+        adaptation_mode="zero_shot",
+        display_name="Mock A (control)",
+        reference_source="unprocessed",
+        **overrides,
+    )
+    bench_env.benchmark.candidates.append(control)
+    return control
+
+
+def test_the_control_hears_the_unprocessed_clips(bench_env):
+    """Same engine, same seeds, same lines — only the reference audio differs."""
+    _add_control_candidate(bench_env)
+    run = asyncio.run(bench_env.run())
+
+    control = [r for r in run.records if r.candidate_id == "mock_a_unprocessed"]
+    baseline = [r for r in run.records if r.candidate_id == "mock_a"]
+    assert control and all(r.succeeded for r in control)
+    assert all(r.reference_source == "unprocessed" for r in control)
+    assert all(r.reference_source == "clean" for r in baseline)
+
+    # It is a control, not a different experiment: seeds and chosen clips must match.
+    by_sentence = {r.sentence_id: r for r in baseline}
+    for record in control:
+        partner = by_sentence[record.sentence_id]
+        assert record.seed == partner.seed
+        assert record.reference_id == partner.reference_id
+
+    rebuilt = bench_env.run_paths.root / "unprocessed_references" / "mock_a_unprocessed"
+    assert list(rebuilt.glob("*.wav"))
+
+
+def test_a_control_without_provenance_is_refused_not_faked(bench_env, demo_pack):
+    """The failure mode this guards against is silent success.
+
+    If the unprocessed clips cannot be rebuilt and the control quietly falls back to the
+    cleaned ones, it produces a confident result saying the cleaning changed nothing —
+    which is the exact opposite of what happened.
+    """
+    import json
+
+    # Strip the provenance the demo pack records, as an older pack would have.
+    bank_file = demo_pack.references_file
+    bank = json.loads(bank_file.read_text(encoding="utf-8"))
+    for sample in bank["samples"]:
+        sample["source_clip"] = None
+        sample["source_offset_s"] = None
+    bank_file.write_text(json.dumps(bank, ensure_ascii=False), encoding="utf-8")
+
+    _add_control_candidate(bench_env)
+    run = asyncio.run(bench_env.run())
+
+    control = [r for r in run.records if r.candidate_id == "mock_a_unprocessed"]
+    assert control
+    assert all(not r.succeeded for r in control)
+    assert "provenance" in control[0].error or "does not record" in control[0].error
+    # The rest of the run is unharmed: one missing control does not cost four hours.
+    assert all(r.succeeded for r in run.records if r.candidate_id == "mock_a")
+
+
+def test_the_report_labels_the_control_as_a_control(bench_env):
+    """Ranked next to real candidates without a label, a control reads as a competitor."""
+    from cvai_evaluation.report import render_run_report
+
+    _add_control_candidate(bench_env)
+    run = asyncio.run(bench_env.run())
+    report = render_run_report(run)
+    assert "unprocessed (control)" in report

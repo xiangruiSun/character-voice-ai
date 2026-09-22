@@ -94,6 +94,13 @@ class BenchmarkCandidate(CVAIModel):
     checkpoint_id: str | None = None
     display_name: str = Field(default="", max_length=120)
     enabled: bool = True
+    #: Which version of the reference clip conditions this candidate. ``clean`` is the
+    #: processed clip from the Reference Bank; ``unprocessed`` rebuilds the same clip
+    #: from the untouched original. Running one candidate each way is the
+    #: null-processing control of decision D7, and the only way to find out whether the
+    #: cleaning chain preserved the character or quietly sanded her down. Everything
+    #: else about the two candidates is identical, so any difference is the processing.
+    reference_source: str = Field(default="clean", pattern=r"^(clean|unprocessed)$")
     #: Engine parameters for this candidate, merged over the provider config.
     engine_params: dict[str, object] = Field(default_factory=dict)
     #: Licence facts, carried so an incompatible engine cannot silently win (M7).
@@ -159,6 +166,10 @@ class GenerationRecord(CVAIModel):
     reference_id: str | None = None
     reference_style: StyleTag | None = None
     reference_was_fallback: bool = False
+    #: ``clean`` or ``unprocessed`` — see ``BenchmarkCandidate.reference_source``. On
+    #: the record because a result that cannot say which audio conditioned it is not
+    #: reproducible (spec §23).
+    reference_source: str = "clean"
 
     seed: int | None = None
     resolved_params: dict[str, object] = Field(default_factory=dict)

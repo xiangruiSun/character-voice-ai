@@ -60,10 +60,10 @@ def render_run_report(run: BenchmarkRun) -> str:
     lines.append("## Candidates")
     lines.append("")
     lines.append(
-        "| Candidate | Engine | Adaptation | Checkpoint | OK | Failed | "
+        "| Candidate | Engine | Adaptation | References | Checkpoint | OK | Failed | "
         "Median duration | Median latency | RTF | Licence |"
     )
-    lines.append("|---|---|---|---|---:|---:|---:|---:|---:|---|")
+    lines.append("|---|---|---|---|---|---:|---:|---:|---:|---:|---|")
 
     by_candidate: dict[str, list] = defaultdict(list)
     for record in run.records:
@@ -80,11 +80,19 @@ def render_run_report(run: BenchmarkRun) -> str:
             else None
         )
         lines.append(
-            "| `{id}` | {engine} | {mode} | {ckpt} | {ok} | {failed} | {dur} | {lat} | "
-            "{rtf} | {lic} |".format(
+            "| `{id}` | {engine} | {mode} | {refs} | {ckpt} | {ok} | {failed} | {dur} | "
+            "{lat} | {rtf} | {lic} |".format(
                 id=candidate.candidate_id,
                 engine=candidate.engine,
                 mode=candidate.adaptation_mode.value,
+                # Which audio conditioned it. A null-processing control (D7) is not a
+                # competitor and must not be read as one, so it is labelled in the
+                # table rather than left to be inferred from a candidate id.
+                refs=(
+                    "unprocessed (control)"
+                    if candidate.reference_source == "unprocessed"
+                    else "clean"
+                ),
                 ckpt=f"`{candidate.checkpoint_id}`" if candidate.checkpoint_id else "—",
                 ok=len(ok),
                 failed=len(records) - len(ok),

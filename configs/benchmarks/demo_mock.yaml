@@ -45,3 +45,15 @@ candidates:
     commercial_use: true
     engine_params:
       timbre_note: darker
+
+  # The null-processing control (decision D7): Mock A again, but conditioned on the
+  # reference clips cut straight from the original recordings instead of the cleaned
+  # ones. Everything else is identical, so any difference is the cleaning chain. Here it
+  # only proves the mechanism works — the demo pack's "recordings" are generated tones.
+  - candidate_id: mock_a_unprocessed
+    engine: mock
+    adaptation_mode: zero_shot
+    display_name: Mock A (unprocessed references — control)
+    reference_source: unprocessed
+    license: MIT
+    commercial_use: true

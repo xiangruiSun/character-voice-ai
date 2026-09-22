@@ -269,6 +269,12 @@ class ReferenceSample(CVAIModel):
     core_style: CoreStyle
     audio: AudioProperties
     quality_score: UnitFloat = 1.0
+    #: Where this clip came from before any cleaning, and at what offset. Carried so the
+    #: benchmark can rebuild the *unprocessed* version of exactly this reference and run
+    #: it as a control (decision D7). Without the provenance, "did our cleaning help or
+    #: did it sand her voice down?" is unanswerable after the fact.
+    source_clip: RelPath | None = None
+    source_offset_s: float | None = Field(default=None, ge=0.0)
     #: Free tags for finer retrieval later, e.g. ``["short", "question", "sentence_final_particle"]``.
     tags: list[str] = Field(default_factory=list)
     #: Engine-specific precomputed artifacts, keyed by engine id — e.g. Fish Speech VQ
@@ -277,10 +283,10 @@ class ReferenceSample(CVAIModel):
     precomputed: dict[str, RelPath] = Field(default_factory=dict)
     notes: str = Field(default="", max_length=500)
 
-    @field_validator("audio_path")
+    @field_validator("audio_path", "source_clip")
     @classmethod
-    def _relative(cls, value: str) -> str:
-        return validate_relative_path(value)
+    def _relative(cls, value: str | None) -> str | None:
+        return None if value is None else validate_relative_path(value)
 
     @model_validator(mode="after")
     def _duration_sanity(self) -> "ReferenceSample":

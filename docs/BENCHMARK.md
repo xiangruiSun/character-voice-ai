@@ -76,6 +76,19 @@ ten because one sidecar was not started.
 sent, the record says so. A silently ignored control is indistinguishable from a bad
 model at listening-test time.
 
+**A null-processing control runs alongside the real candidates** (decision D7). Set
+`reference_source: unprocessed` on a candidate and it is conditioned on reference clips
+cut straight from the original recordings — same lines, same styles, same seeds, no
+cleaning. It is possible because every reference records which recording it came from
+and at what offset, so the control is the *same clip*, not a similar one.
+
+This is the only instrument that answers "did our preprocessing preserve her, or sand her
+down?", which spec §27 lists as a way to lose a character voice while every number
+improves. The run **refuses** rather than falling back to the cleaned clips when the
+provenance or the originals are missing: a control that silently becomes a copy of what
+it controls for does not fail loudly, it produces a confident wrong answer. The run report
+labels it `unprocessed (control)` so nobody reads it as a competitor.
+
 **Fallback rate is a first-class number.** If the Reference Bank could not serve the
 requested style for a quarter of the lines, every candidate was partly judged on fallback
 styles and the differences the benchmark exists to measure have been flattened. The run

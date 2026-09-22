@@ -43,7 +43,7 @@ model-backed stage reports its own absence rather than silently producing nothin
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 392 tests
+make test        # 404 tests
 make demo        # full benchmark pipeline on a synthetic pack with the mock engine
 ```
 
@@ -161,6 +161,7 @@ load time, so no secret is ever written into a config file.
 
 | Document | What it covers |
 |---|---|
+| `docs/GETTING_STARTED.md` | **Start here** — the path from a folder of voice lines to a character who talks back, with the decisions you have to make on the way |
 | `docs/IMPLEMENTATION_PLAN.md` | All 14 milestones, and the eight architectural decisions fixed in Milestone 1 |
 | `docs/TECH_LANDSCAPE.md` | The open-source survey behind those decisions, with sources |
 | `docs/VOICEPACK.md` | Voice Pack format, the preprocessing pipeline, and the cleaning philosophy |

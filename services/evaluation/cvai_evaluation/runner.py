@@ -51,6 +51,7 @@ from cvai_types import (
 )
 
 from .config import BenchmarkConfig
+from .unprocessed import rebuild_all
 
 log = get_logger(__name__)
 
@@ -204,6 +205,14 @@ class BenchmarkRunner:
                 f"{candidate.adaptation_mode.value!r}",
             )
 
+        unprocessed: dict[str, Path] = {}
+        if candidate.reference_source == "unprocessed":
+            try:
+                unprocessed = self._rebuild_unprocessed_references(candidate, retriever)
+            except VoicePackError as exc:
+                await provider.aclose()
+                return self._skip_candidate(candidate, sentences, str(exc))
+
         self.logger.event(
             "candidate.start",
             candidate_id=candidate.candidate_id,
@@ -223,7 +232,14 @@ class BenchmarkRunner:
                 for repeat in range(self.benchmark.repeats):
                     records.append(
                         await self._generate_one(
-                            provider, candidate, sentence, index, repeat, retriever, out_dir
+                            provider,
+                            candidate,
+                            sentence,
+                            index,
+                            repeat,
+                            retriever,
+                            out_dir,
+                            unprocessed,
                         )
                     )
         finally:
@@ -238,6 +254,31 @@ class BenchmarkRunner:
         )
         return records
 
+    def _rebuild_unprocessed_references(
+        self,
+        candidate: BenchmarkCandidate,
+        retriever: RuleBasedReferenceRetriever,
+    ) -> dict[str, Path]:
+        """Cut every reference out of the original recordings (decision D7).
+
+        All or nothing: a control set that covers half the styles is not comparing the
+        same thing as the candidate it controls for, and a half-control reads as a
+        result rather than as a gap.
+        """
+        out_dir = self.run_paths.root / "unprocessed_references" / candidate.candidate_id
+        rebuilt, problems = rebuild_all(retriever.bank.samples, self.paths, out_dir)
+        if problems:
+            raise VoicePackError(
+                f"the null-processing control needs every reference rebuilt from its "
+                f"original recording, and {len(problems)} could not be: {problems[0]}"
+            )
+        self.logger.event(
+            "candidate.unprocessed_references",
+            candidate_id=candidate.candidate_id,
+            rebuilt=len(rebuilt),
+        )
+        return rebuilt
+
     async def _generate_one(
         self,
         provider: TTSProvider,
@@ -247,6 +288,7 @@ class BenchmarkRunner:
         repeat: int,
         retriever: RuleBasedReferenceRetriever,
         out_dir: Path,
+        unprocessed: dict[str, Path] | None = None,
     ) -> GenerationRecord:
         # Identical across candidates, so any difference in output is the engine.
         seed = self.benchmark.base_seed + sentence_index * 100 + repeat
@@ -258,6 +300,13 @@ class BenchmarkRunner:
             emotion_intensity=0.6,
         )
         reference = retriever.select(controls, variation_key=variation_key)
+        if unprocessed:
+            # Same clip, same line, same style — just never cleaned. Swapping only the
+            # audio keeps the transcript and the style metadata identical, so the
+            # control differs from its partner candidate in exactly one thing.
+            reference = reference.model_copy(
+                update={"audio_path": str(unprocessed[reference.reference_id])}
+            )
 
         suffix = f"_r{repeat}" if self.benchmark.repeats > 1 else ""
         output_path = out_dir / f"{sentence.sentence_id}{suffix}.wav"
@@ -288,6 +337,7 @@ class BenchmarkRunner:
             reference_id=reference.reference_id,
             reference_style=reference.style,
             reference_was_fallback=reference.was_fallback,
+            reference_source=candidate.reference_source,
             seed=seed,
         )
 
