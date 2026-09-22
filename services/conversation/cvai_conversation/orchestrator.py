@@ -39,7 +39,7 @@ from pathlib import Path
 from cvai_core.interfaces.reference import ReferenceRetriever
 from cvai_core.interfaces.tts import TTSProvider
 from cvai_core.logging_setup import get_logger
-from cvai_speech_planner import CharacterSpeechPlanner
+from cvai_speech_planner import CharacterSpeechPlanner, ConversationMemory
 from cvai_text_normalizer import ChineseTextNormalizer, ChunkerConfig, SpeechChunker
 from cvai_types import (
     AdaptationMode,
@@ -129,7 +129,10 @@ class ConversationOrchestrator:
         self.config = config or OrchestratorConfig()
 
         self.machine = StateMachine()
-        self.history: list[LLMMessage] = []
+        # Not a bare list: what falls out of the prompt window is summarised rather than
+        # forgotten, so she still knows in turn 20 what she was told in turn 2. See
+        # cvai_speech_planner.memory.
+        self.memory = ConversationMemory(profile.memory)
         self.turns: list[Turn] = []
         self._current: TurnContext | None = None
         self._audio_root = Path(audio_root or self.config.audio_dir) / session.session_id
@@ -143,6 +146,11 @@ class ConversationOrchestrator:
     @property
     def current_turn_id(self) -> str | None:
         return self._current.turn_id if self._current else None
+
+    @property
+    def history(self) -> list[LLMMessage]:
+        """Every message this session, newest last. A view; append via ``memory``."""
+        return self.memory.turns
 
     # -- barge-in (spec §16) --------------------------------------------------------
 
@@ -205,7 +213,7 @@ class ConversationOrchestrator:
     async def _run(
         self, context: TurnContext, user_text: str, turn: Turn
     ) -> AsyncIterator[TurnEvent]:
-        self.history.append(LLMMessage(role=Role.USER, content=user_text))
+        self.memory.add_user(user_text)
 
         yield self._transition(context, ConversationState.THINKING)
 
@@ -242,6 +250,22 @@ class ConversationOrchestrator:
             type=TurnEventType.TURN_END, turn_id=context.turn_id, is_final=True
         )
 
+        # After the turn, never during it: summarising is another LLM round trip, and
+        # putting it in front of the reply would pay for memory in latency the user
+        # hears. An interrupted turn is skipped — it is still in the window anyway.
+        await self._remember()
+
+    async def _remember(self) -> None:
+        try:
+            if await self.memory.maybe_summarize(getattr(self.planner, "llm", None)):
+                log.info(
+                    "folded %d messages into memory for session %s",
+                    self.memory.summarized_messages,
+                    self.session.session_id,
+                )
+        except Exception as exc:  # noqa: BLE001 - memory must never break a conversation
+            log.warning("could not update memory: %s", exc)
+
     # -- complete mode (default) -----------------------------------------------------
 
     async def _complete_turn(
@@ -250,14 +274,17 @@ class ConversationOrchestrator:
         yield self._transition(context, ConversationState.PLANNING)
 
         result = await self.planner.plan(
-            self.profile.character_id, user_text, history=self.history[:-1]
+            self.profile.character_id,
+            user_text,
+            history=self.history[:-1],
+            summary=self.memory.summary,
         )
         if context.is_cancelled:
             return
 
         plan = result.plan
         turn.character_text = plan.text
-        self.history.append(LLMMessage(role=Role.ASSISTANT, content=plan.text))
+        self.memory.add_character(plan.text)
 
         yield TurnEvent(
             type=TurnEventType.PLAN,
@@ -285,7 +312,12 @@ class ConversationOrchestrator:
         """Chunk the LLM's text as it arrives; no per-line performance direction."""
         controls = StyleControls(emotion=self.profile.voice.default_reference_style)
         chunker = SpeechChunker(self.config.chunker, controls=controls)
-        messages = self.planner.compose(self.profile, user_text, history=self.history[:-1])
+        messages = self.planner.compose(
+            self.profile,
+            user_text,
+            history=self.history[:-1],
+            summary=self.memory.summary,
+        )
 
         collected: list[str] = []
         pending: list[SpeechChunk] = []
@@ -321,7 +353,7 @@ class ConversationOrchestrator:
         text = "".join(collected)
         turn.character_text = text
         if text:
-            self.history.append(LLMMessage(role=Role.ASSISTANT, content=text))
+            self.memory.add_character(text)
 
     # -- synthesis --------------------------------------------------------------------
 

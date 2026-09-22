@@ -43,7 +43,7 @@ model-backed stage reports its own absence rather than silently producing nothin
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 469 tests
+make test        # 499 tests
 make demo        # full benchmark pipeline on a synthetic pack with the mock engine
 ```
 
@@ -67,7 +67,7 @@ character-voice-ai/
 │   ├── evaluation/        cvai_evaluation     — the benchmark and listening test
 │   ├── voice_preprocessing/                   — Voice Pack pipeline (M2)
 │   ├── text_normalizer/                       — Chinese TTS front-end (M8)
-│   ├── speech_planner/                        — performance director (M8)
+│   ├── speech_planner/                        — performance director + memory (M8)
 │   └── conversation/                          — orchestrator + barge-in (M9-13)
 ├── providers/{tts,stt,llm}/                   — engine adapters, swappable by config
 ├── characters/profiles/                       — CharacterProfile YAML

@@ -26,6 +26,7 @@ from .planner import (
     PlanResult,
     plan_to_messages,
 )
+from .memory import ConversationMemory, extract_facts, render_transcript
 from .prompt import UNIVERSAL_RULES, build_messages, render_system_prompt, trim_history
 
 
@@ -48,5 +49,8 @@ __all__ = [
     "plan_to_messages",
     "render_system_prompt",
     "speech_plan_json_schema",
+    "ConversationMemory",
+    "extract_facts",
+    "render_transcript",
     "trim_history",
 ]

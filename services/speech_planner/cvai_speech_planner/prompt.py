@@ -35,6 +35,7 @@ def render_system_prompt(
     *,
     examples: Sequence[DialogueExample] = (),
     memory_facts: Sequence[str] = (),
+    summary: str = "",
     style_names: Sequence[str] | None = None,
     include_format_instructions: bool = True,
 ) -> str:
@@ -70,6 +71,17 @@ def render_system_prompt(
 
     if memory_facts:
         parts.append(_SECTION.format(title="你记得的事", body=_bullets(memory_facts)))
+
+    if summary.strip():
+        # What fell out of the sliding window. Labelled as *earlier in this
+        # conversation* rather than mixed into her permanent knowledge: the two have
+        # different authority, and a model that cannot tell them apart will assert a
+        # half-remembered detail as firmly as her own backstory.
+        parts.append(
+            _SECTION.format(
+                title="你们之前聊过（按需要引用，不要复述）", body=summary.strip()
+            )
+        )
 
     if examples:
         parts.append(
@@ -155,6 +167,7 @@ def build_messages(
     history: Sequence[LLMMessage] = (),
     examples: Sequence[DialogueExample] = (),
     memory_facts: Sequence[str] = (),
+    summary: str = "",
     style_names: Sequence[str] | None = None,
 ) -> list[LLMMessage]:
     """System prompt + trimmed history + the new user turn."""
@@ -165,6 +178,7 @@ def build_messages(
                 profile,
                 examples=examples,
                 memory_facts=memory_facts,
+                summary=summary,
                 style_names=style_names,
             ),
         )
@@ -181,7 +195,9 @@ def trim_history(
 
     Trimming from the front, not the back: the recent turns carry the conversational
     state, and the character's identity lives in the system prompt rather than in old
-    messages. Milestone 8's summarization replaces what is dropped here.
+    messages. What is dropped here is not lost — :class:`~cvai_speech_planner.memory.
+    ConversationMemory` folds it into the running summary first, which arrives back in
+    the system prompt as "你们之前聊过".
     """
     if max_turns <= 0:
         return []

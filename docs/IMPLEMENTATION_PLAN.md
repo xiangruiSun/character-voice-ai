@@ -181,6 +181,26 @@ paraphrases demonstrate none of her range. Selection is deterministic and the ch
 lines are presented in profile order, so the prompt reads as a transcript of her rather
 than a ranked list.
 
+**Memory is summarised, not truncated.** `MemorySettings.summarize_after_turns` had been
+in the schema since Milestone 1 with nothing implementing it: history was trimmed to the
+last N exchanges and everything older was gone. That failure is invisible in testing,
+where conversations are three turns long, and glaring in use — you tell her your sister's
+name in turn 2 and by turn 20 she has never heard of her. For a character whose entire
+value is being *this* character talking to *you*, forgetting is worse than a slightly
+wrong intonation.
+
+The window still slides; what falls out of it is folded into a running summary that rides
+in the system prompt under its own heading, because half-remembered conversation and her
+actual backstory have different authority and a model that cannot tell them apart asserts
+both equally firmly. Three rules keep it honest, since a memory that invents is worse
+than one that forgets: the summary is written in the third person as facts (one written
+in her voice gets imitated as dialogue); the fallback is **extractive, never generative**,
+built from what the user actually said, because her side can be re-derived from the
+profile and the user's cannot; and it is bounded, since an unbounded summary eventually
+costs more context than the transcript it replaced. A failed summariser never breaks a
+turn, and summarising happens *after* the reply, so memory is never paid for in latency
+the user hears.
+
 **The profile itself is linted** (`cvai-character lint`), because it is written by hand
 and nothing about it fails loudly. A style declared with no examples still produces
 replies — the planner asks for it, the model guesses what she sounds like teasing, and

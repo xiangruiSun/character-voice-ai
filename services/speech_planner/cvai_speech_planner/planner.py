@@ -89,6 +89,7 @@ class CharacterSpeechPlanner:
         user_text: str,
         *,
         history: Sequence[LLMMessage] = (),
+        summary: str = "",
         style_hint: str | None = None,
     ) -> list[LLMMessage]:
         examples = self.characters.retrieve_examples(
@@ -103,6 +104,9 @@ class CharacterSpeechPlanner:
             history=trim_history(history, profile.memory.max_turns),
             examples=examples,
             memory_facts=profile.memory.persistent_facts,
+            # What fell out of the sliding window, folded into a running summary so she
+            # still knows in turn 20 what she was told in turn 2.
+            summary=summary,
             style_names=profile.available_styles,
         )
 
@@ -114,11 +118,16 @@ class CharacterSpeechPlanner:
         user_text: str,
         *,
         history: Sequence[LLMMessage] = (),
+        summary: str = "",
         style_hint: str | None = None,
     ) -> PlanResult:
         profile = self.characters.get(character_id)
         messages = self.compose(
-            profile, user_text, history=history, style_hint=style_hint
+            profile,
+            user_text,
+            history=history,
+            summary=summary,
+            style_hint=style_hint,
         )
 
         raw = ""
