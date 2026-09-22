@@ -49,6 +49,7 @@ dev = [
 
 [project.scripts]
 cvai-voicepack = "cvai_core.cli.voicepack_cli:main"
+cvai-character = "cvai_core.cli.character_cli:main"
 cvai-bench = "cvai_evaluation.cli:main"
 cvai-prep = "cvai_voice_preprocessing.cli:main"
 cvai-export = "cvai_voice_training.cli:main"

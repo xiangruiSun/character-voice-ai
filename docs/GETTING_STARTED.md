@@ -33,17 +33,33 @@ this project holds itself to; the `LICENSE` covers the code and nothing else.
 ```bash
 make install                                   # pydantic + PyYAML + dev tools
 cvai-voicepack init denia_cn --character denia_cn --display-name "迪尼娅"
+cvai-character init denia_cn --name "迪尼娅" --voicepack denia_cn
 ```
 
-That writes `voicepacks/denia_cn/` with the directory skeleton and a manifest. Then write
-`characters/profiles/denia_cn.yaml` — who she is, how she speaks, which styles exist. The
-profile is *words*; the pack is *voice*. They meet only through `voice.voicepack_id`, and
-keeping them apart is what lets you rewrite her personality without invalidating a
-trained voice.
+The first writes `voicepacks/denia_cn/` — the directory skeleton and a manifest. The
+second writes `characters/profiles/denia_cn.yaml` — who she is, how she speaks, which
+styles exist. The profile is *words*; the pack is *voice*. They meet only through
+`voice.voicepack_id`, and keeping them apart is what lets you rewrite her personality
+without invalidating a trained voice.
 
-Start with the styles you can actually hear in your audio. A style you cannot fill with
-clips is worse than one you never declared: the retriever will fall back and you will
-wonder why "teasing" sounds neutral.
+Fill in the **dialogue examples** before anything else. V1 does not fine-tune the LLM
+(spec §11), so her original lines are the only thing in the prompt carrying her voice:
+personality adjectives say what to aim for, real lines show it. Record where each line
+came from — a quest name, a voice file — so the set can be audited later. Paraphrased or
+LLM-invented "examples" are worse than none, because they teach the model to imitate an
+imitation.
+
+```bash
+cvai-character lint denia_cn --pack denia_cn
+```
+
+The linter is the cheap version of the listening test. Its central check is style
+coverage, from both sides: a style in `available_styles` with no examples means the
+planner will ask for it and the model will guess; a style with no reference clips means
+retrieval falls back to neutral. Either way you get spec §27's "every line sounds the
+same", and neither shows up as an error at runtime.
+
+So start narrow. Two styles you can fill properly beat ten you declared ambitiously.
 
 ---
 

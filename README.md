@@ -43,7 +43,7 @@ model-backed stage reports its own absence rather than silently producing nothin
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 426 tests
+make test        # 452 tests
 make demo        # full benchmark pipeline on a synthetic pack with the mock engine
 ```
 
@@ -132,6 +132,11 @@ listening, not by a leaderboard.
 cvai-voicepack init denia_cn --character denia_cn --display-name "迪尼娅"
 cvai-voicepack validate denia_cn --strict --check-profile denia_cn
 cvai-voicepack list
+
+# Characters (the other half)
+cvai-character init denia_cn --name "迪尼娅" --voicepack denia_cn
+cvai-character lint denia_cn --pack denia_cn        # styles with no examples, and more
+cvai-character list
 
 # Preprocessing (Milestone 2)
 cvai-prep backends                                  # what is installed

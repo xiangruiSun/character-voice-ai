@@ -172,6 +172,16 @@ paraphrases demonstrate none of her range. Selection is deterministic and the ch
 lines are presented in profile order, so the prompt reads as a transcript of her rather
 than a ranked list.
 
+**The profile itself is linted** (`cvai-character lint`), because it is written by hand
+and nothing about it fails loudly. A style declared with no examples still produces
+replies — the planner asks for it, the model guesses what she sounds like teasing, and
+the voice pack performs the guess faithfully. An empty `world_knowledge` list still
+answers, by inventing lore, which breaks the character fastest for the people who know
+her best. The linter separates *malformed* (the schema's job) from *well-formed and
+wrong*, and grades by cost: errors are things that will produce wrong output, warnings
+things that will produce weaker output. A profile early in collection should be all
+warnings — guiding, not blocking.
+
 Guards then make the plan performable: a style the voice pack does not have is mapped to
 one it does, an over-long reply is cut at a sentence boundary rather than mid-clause,
 bracketed narration is stripped, and a reply that breaks character is flagged. Repairs are
