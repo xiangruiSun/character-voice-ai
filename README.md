@@ -43,7 +43,7 @@ model-backed stage reports its own absence rather than silently producing nothin
 
 ```bash
 make install     # pip install -e ".[dev]"
-make test        # 517 tests
+make test        # 527 tests
 make demo        # full benchmark pipeline on a synthetic pack with the mock engine
 make talk        # hold a conversation with the synthetic demo character, offline
 ```
@@ -165,6 +165,28 @@ pip install -e '.[runtime]'
 uvicorn cvai_api.app:app --port 8000
 open apps/web/dev-client.html          # type, or press 开麦 and speak
 ```
+
+---
+
+## Putting this on GitHub
+
+```bash
+python scripts/publish_to_github.py               # asks for a token, hidden input
+python scripts/publish_to_github.py --public      # default is private
+python scripts/publish_to_github.py --use-gh      # if the GitHub CLI is signed in
+```
+
+Creates the repository, sets `origin`, renames the branch to `main` and pushes. Standard
+library only, so it runs wherever the project does, Windows included. A fine-grained
+token with **Administration: write** and **Contents: write** on new repositories is
+enough, and you can delete it straight afterwards — the token is passed to git through an
+inline credential helper reading it from the environment, so it never lands in
+`.git/config`, your shell history or the process list.
+
+It refuses to push a dirty tree, and re-running it after a failure reuses the repository
+it already made rather than erroring.
+
+---
 
 Configuration layers: `configs/app.yaml`, then `CVAI__section__key` environment
 variables, then command-line overrides. `${VAR}` and `${VAR:-default}` are expanded at
