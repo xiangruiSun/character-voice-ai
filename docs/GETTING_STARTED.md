@@ -188,8 +188,8 @@ cvai-talk denia_cn                  # from the terminal, no browser needed
 cvai-talk denia_cn --audition       # one line per style, as a page to listen through
 
 pip install -e '.[runtime]'
-uvicorn cvai_api.app:app --port 8000
-open apps/web/dev-client.html
+cvai-api --port 8000
+# open http://127.0.0.1:8000/
 ```
 
 Run `--audition` first and listen for one thing: whether the styles are actually

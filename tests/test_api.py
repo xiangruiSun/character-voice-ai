@@ -438,8 +438,11 @@ def test_speaking_into_the_socket_runs_a_turn(client):
         messages, audio_frames = _collect(socket)
 
     kinds = [message["type"] for message in messages]
-    assert kinds[0] == "transcript"
-    assert messages[0]["text"] == "外面下雨了吗"
+    # The client hears, in order: speech started, utterance being transcribed, the text.
+    assert messages[0] == {"type": "vad", "event": "speech_start"}
+    assert messages[1] == {"type": "state", "state": "transcribing"}
+    assert kinds[2] == "transcript"
+    assert messages[2]["text"] == "外面下雨了吗"
     assert "character_text" in kinds
     assert kinds[-1] == "turn_end"
     assert audio_frames >= 1
@@ -477,8 +480,45 @@ def test_ending_the_audio_stream_flushes_a_part_spoken_utterance(client):
         socket.send_text(json.dumps({"type": "user_audio_end"}))
         messages, _ = _collect(socket)
 
-    assert messages[0]["type"] == "transcript"
+    kinds = [message["type"] for message in messages]
+    assert kinds.index("transcript") > kinds.index("state")
+    assert {"type": "state", "state": "transcribing"} in messages
     assert messages[-1]["type"] == "turn_end"
+
+
+def test_turn_mode_stops_listening_after_one_utterance(client):
+    """In turn mode the microphone window closes when the utterance ends, so audio
+    that is still in flight cannot start a second turn behind the user's back."""
+    session_id = client.post("/sessions", json={}).json()["session_id"]
+
+    with client.websocket_connect(f"/sessions/{session_id}/ws") as socket:
+        socket.send_text(json.dumps(
+            {"type": "user_audio_begin", "sample_rate": 16000, "mode": "turn"}))
+        for frame in _mic_frames() + _mic_frames():      # two utterances' worth
+            socket.send_bytes(frame)
+        messages, _ = _collect(socket)
+        socket.send_text(json.dumps({"type": "user_text", "text": "在吗"}))
+        after, _ = _collect(socket)
+
+    assert sum(m["type"] == "transcript" for m in messages + after) == 1
+
+
+def test_stopping_without_speech_reports_nothing_heard(client):
+    """Pressing "done" on silence must end in an answer, not an endless "transcribing"."""
+    from test_listening import floats_to_pcm16, room_noise
+
+    session_id = client.post("/sessions", json={}).json()["session_id"]
+
+    with client.websocket_connect(f"/sessions/{session_id}/ws") as socket:
+        socket.send_text(json.dumps(
+            {"type": "user_audio_begin", "sample_rate": 16000, "mode": "turn"}))
+        socket.send_bytes(floats_to_pcm16(room_noise(400)))
+        socket.send_text(json.dumps({"type": "user_audio_end"}))
+        message = json.loads(socket.receive()["text"])
+
+    assert message["type"] == "error"
+    assert message["code"] == "no_speech"
+    assert message["recoverable"] is True
 
 
 def test_a_session_without_speech_to_text_says_so(manager: SessionManager):
@@ -502,3 +542,25 @@ def test_a_session_without_speech_to_text_says_so(manager: SessionManager):
         # Typing still works.
         turn = test_client.post(f"/sessions/{session_id}/turn", json={"text": "在吗"})
         assert turn.status_code == 200
+
+
+def test_speech_with_no_words_reports_nothing_heard(manager: SessionManager):
+    """Noise loud enough to count as speech, but no words: the client must hear back."""
+    from fastapi.testclient import TestClient
+
+    from cvai_api.app import create_app
+
+    from test_listening import FakeSTT
+
+    manager.stt_factory = lambda cfg, name: FakeSTT("")
+    with TestClient(create_app(manager)) as client:
+        session_id = client.post("/sessions", json={}).json()["session_id"]
+        with client.websocket_connect(f"/sessions/{session_id}/ws") as socket:
+            socket.send_text(json.dumps(
+                {"type": "user_audio_begin", "sample_rate": 16000, "mode": "turn"}))
+            for frame in _mic_frames():
+                socket.send_bytes(frame)
+            messages = [json.loads(socket.receive()["text"]) for _ in range(3)]
+
+    assert messages[1] == {"type": "state", "state": "transcribing"}
+    assert messages[2]["type"] == "error" and messages[2]["code"] == "no_speech"

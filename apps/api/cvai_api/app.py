@@ -35,7 +35,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from cvai_conversation import OrchestratorConfig
+from cvai_conversation import ListenerEvent, OrchestratorConfig
 from cvai_core.errors import CVAIError
 from cvai_core.paths import repo_root
 from cvai_core.registry import build_llm_provider
@@ -56,6 +56,7 @@ try:  # pragma: no cover - import shape depends on the installed extras
     from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, JSONResponse
+    from fastapi.staticfiles import StaticFiles
 
     from .chat import build_chat_router
 
@@ -119,10 +120,18 @@ def create_app(
         # Plain local-LLM chat: Browser → FastAPI (/api/chat/stream) → LLMProvider.
         return FileResponse(repo_root() / "apps" / "web" / "chat.html")
 
+    web = repo_root() / "apps" / "web"
+    # The app is served from the API so it is same-origin: http://127.0.0.1:8000/
+    app.mount("/assets", StaticFiles(directory=web / "assets", check_dir=False), name="assets")
+
     @app.get("/", include_in_schema=False)
+    def web_app() -> Any:
+        return FileResponse(web / "index.html")
+
+    @app.get("/dev", include_in_schema=False)
     def dev_client() -> Any:
-        # Serving the page from the API makes it same-origin: open http://127.0.0.1:8000/
-        return FileResponse(repo_root() / "apps" / "web" / "dev-client.html")
+        # The original pipeline client: raw server states, continuous microphone.
+        return FileResponse(web / "dev-client.html")
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -135,7 +144,10 @@ def create_app(
 
     @app.get("/characters")
     def characters() -> dict[str, Any]:
-        return {"characters": sessions.available_characters()}
+        return {
+            "characters": sessions.available_characters(),
+            "details": sessions.character_details(),
+        }
 
     # -- sessions -----------------------------------------------------------------
 
@@ -221,6 +233,15 @@ def create_app(
         orchestrator = session.orchestrator
         turn_task: asyncio.Task | None = None
         listening = False
+        # "turn": the microphone closes after each utterance (one question, one answer).
+        # "continuous" (default): it stays open, and speech during a reply barges in.
+        turn_mode = False
+        # Whether this listening window already produced an utterance, so a later
+        # "user stopped" does not report "nothing heard" for a turn that is underway.
+        captured = False
+
+        async def send_json(payload: dict) -> None:
+            await socket.send_text(json.dumps(payload, ensure_ascii=False))
 
         async def emit(event) -> None:
             for message in to_server_messages(event):
@@ -246,9 +267,16 @@ def create_app(
 
         async def speak_for(samples) -> None:
             """Transcribe one captured utterance and run the turn it asks for."""
+            heard = False
             try:
                 async for event in session.voice_loop().respond(samples):
+                    heard = True
                     await emit(event)
+                if not heard:
+                    # Silence or noise: no transcript, so no turn. Say so — otherwise
+                    # the client waits on "transcribing" forever.
+                    await send_json({"type": "error", "code": "no_speech",
+                                     "message": "没有听清，请再说一次", "recoverable": True})
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -256,6 +284,16 @@ def create_app(
                 await socket.send_text(
                     json.dumps({"type": "error", "code": "voice_failed", "message": str(exc)})
                 )
+
+        async def start_voice_turn(utterance) -> None:
+            nonlocal turn_task, listening, captured
+            captured = True
+            if turn_mode:
+                # The utterance is complete; stop taking audio until the next turn.
+                listening = False
+            await send_json({"type": "state", "state": "transcribing"})
+            await supersede()
+            turn_task = asyncio.create_task(speak_for(utterance))
 
         async def supersede() -> None:
             """Stop whatever the character is doing, because a new turn is starting."""
@@ -283,7 +321,8 @@ def create_app(
                     if not listening:
                         continue
                     try:
-                        utterances = await session.voice_loop().observe(data)
+                        loop = session.voice_loop()
+                        utterances = await loop.observe(data)
                     except CVAIError as exc:
                         listening = False
                         await socket.send_text(
@@ -292,9 +331,10 @@ def create_app(
                             )
                         )
                         continue
+                    if ListenerEvent.SPEECH_START in loop.last_events:
+                        await send_json({"type": "vad", "event": "speech_start"})
                     for utterance in utterances:
-                        await supersede()
-                        turn_task = asyncio.create_task(speak_for(utterance))
+                        await start_voice_turn(utterance)
                     continue
 
                 raw = message.get("text")
@@ -315,19 +355,25 @@ def create_app(
 
                 elif kind == "user_audio_begin" or kind == "start_listening":
                     listening = True
+                    captured = False
+                    turn_mode = payload.get("mode") == "turn"
                     with contextlib.suppress(CVAIError):
                         session.voice_loop().reset()
 
                 elif kind == "user_audio_end" or kind == "stop_listening":
-                    listening = False
+                    was_listening, listening = listening, False
                     try:
                         loop = session.voice_loop()
                     except CVAIError:
                         continue
                     # A released button is a fact; the silence timer is a guess.
-                    for utterance in loop.end_utterance():
-                        await supersede()
-                        turn_task = asyncio.create_task(speak_for(utterance))
+                    utterances = loop.end_utterance() if was_listening else []
+                    for utterance in utterances:
+                        await start_voice_turn(utterance)
+                    if turn_mode and not utterances and not captured:
+                        await send_json({"type": "error", "code": "no_speech",
+                                         "message": "没有听到声音，请再试一次",
+                                         "recoverable": True})
 
                 elif kind == "interrupt":
                     await orchestrator.interrupt(

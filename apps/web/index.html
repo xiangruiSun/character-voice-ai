@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Character Voice AI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%239fa3e8'/%3E%3Crect x='12' y='7' width='8' height='13' rx='4' fill='white'/%3E%3Cpath d='M9 16a7 7 0 0 0 14 0M16 23v3' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<!--
+  Character voice chat. One page, no build step: index.html + assets/app.css + assets/app.js,
+  served by the API (http://127.0.0.1:8000/). The original pipeline client is at /dev.
+
+  Three separate pieces of state drive everything you see (see app.js):
+    A. connection   — is the local AI backend reachable?        (top bar pill)
+    B. microphone   — is audio actually being captured?         (status bar chip + mic button)
+    C. conversation — idle, listening, transcribing, thinking,
+                      generating speech, speaking, error        (status bar + character header)
+-->
+<div class="app" id="app" data-state="idle" data-conn="connecting" data-mic="off">
+
+  <header class="topbar">
+    <div class="brand">Character Voice AI</div>
+    <div class="topbar-actions">
+      <span class="conn" id="conn" role="status" aria-live="polite">
+        <span class="conn-dot" aria-hidden="true"></span>
+        <span class="conn-text" id="conn-text">正在连接…</span>
+      </span>
+      <button class="icon-btn" id="reconnect" type="button" hidden aria-label="重新连接">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+      </button>
+      <button class="icon-btn" id="new-chat" type="button" aria-label="新对话" title="新对话">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+      <button class="icon-btn" id="open-settings" type="button" aria-label="设置" title="设置">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="character" aria-label="当前角色">
+      <div class="avatar avatar-lg" id="avatar" aria-hidden="true"><span id="avatar-text">卡</span></div>
+      <div class="character-info">
+        <h1 class="character-name" id="character-name">正在加载角色…</h1>
+        <p class="character-sub" id="character-sub">本地角色语音</p>
+      </div>
+      <div class="presence" id="presence" aria-hidden="true">
+        <span class="presence-bars"><i></i><i></i><i></i><i></i></span>
+        <span class="presence-text" id="presence-text">在线</span>
+      </div>
+    </section>
+
+    <div class="conversation" id="conversation">
+      <ol class="messages" id="messages" role="log" aria-label="对话记录"></ol>
+      <div class="empty" id="empty">
+        <p class="empty-title">和 <span class="js-name">她</span> 打个招呼吧</p>
+        <p class="empty-hint">点击下方麦克风说话，或者直接输入文字。</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="dock">
+    <div class="dock-inner">
+      <div class="statusbar" id="statusbar">
+        <div class="status-main" role="status" aria-live="polite" aria-atomic="true">
+          <span class="status-icon" id="status-icon" aria-hidden="true"></span>
+          <span class="status-text">
+            <span class="status-label" id="status-label">准备就绪</span>
+            <span class="status-hint" id="status-hint">点击麦克风开始说话</span>
+          </span>
+        </div>
+        <div class="meter" id="meter" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <button class="chip-btn" id="status-action" type="button" hidden></button>
+        <span class="mic-chip" id="mic-chip">
+          <svg class="mic-chip-on" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          <svg class="mic-chip-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.9 2.3M5 11a7 7 0 0 0 11.4 5.4M19 11a7 7 0 0 1-.6 2.8M12 18v3M3 3l18 18"/></svg>
+          <span id="mic-chip-text">麦克风已关闭</span>
+        </span>
+      </div>
+
+      <div class="alert" id="alert" role="alert" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+        <span class="alert-text" id="alert-text"></span>
+        <button class="chip-btn" id="alert-retry" type="button">重试</button>
+        <button class="icon-btn icon-btn-sm" id="alert-close" type="button" aria-label="关闭提示">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <label class="visually-hidden" for="input">输入消息</label>
+        <textarea id="input" rows="1" placeholder="输入消息…" enterkeyhint="send"></textarea>
+        <button class="action-btn send-btn" id="send" type="submit" aria-label="发送消息" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+        <button class="action-btn mic-btn" id="mic" type="button" aria-label="开始说话" aria-pressed="false">
+          <svg class="i-mic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+          <span class="spinner i-spin" aria-hidden="true"></span>
+          <span class="mic-btn-label" id="mic-label">完成</span>
+        </button>
+      </form>
+      <p class="composer-hint">Enter 发送 · Shift+Enter 换行 · Esc 停止</p>
+    </div>
+  </footer>
+</div>
+
+<div class="boot" id="boot" role="status" aria-live="polite">
+  <div class="boot-card">
+    <span class="spinner spinner-lg" id="boot-spinner" aria-hidden="true"></span>
+    <p class="boot-text" id="boot-text">正在连接本地 AI…</p>
+    <button class="primary-btn" id="boot-retry" type="button" hidden>重试</button>
+  </div>
+</div>
+
+<dialog class="settings" id="settings" aria-labelledby="settings-title">
+  <form method="dialog" class="settings-inner">
+    <header class="settings-head">
+      <h2 id="settings-title">设置</h2>
+      <button class="icon-btn" value="close" aria-label="关闭设置">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+
+    <label class="field">
+      <span class="field-label">角色</span>
+      <select id="set-character"></select>
+      <span class="field-hint">切换角色会开始新的对话。</span>
+    </label>
+
+    <label class="field field-row">
+      <span class="field-label">自动播放语音</span>
+      <input type="checkbox" id="set-autoplay" class="switch" checked>
+    </label>
+
+    <label class="field">
+      <span class="field-label">音量</span>
+      <input type="range" id="set-volume" min="0" max="1" step="0.05" value="1">
+    </label>
+
+    <label class="field">
+      <span class="field-label">麦克风</span>
+      <select id="set-mic"><option value="">系统默认</option></select>
+      <span class="field-hint">授权麦克风后可选择具体设备。</span>
+    </label>
+
+    <details class="dev" id="dev">
+      <summary>开发者信息</summary>
+      <dl class="dev-info" id="dev-info"></dl>
+      <table class="dev-table">
+        <caption>最近几轮耗时（秒）</caption>
+        <thead><tr><th>方式</th><th>录音</th><th>识别</th><th>首字</th><th>首段语音</th><th>总计</th></tr></thead>
+        <tbody id="dev-turns"></tbody>
+      </table>
+      <p class="dev-note" id="dev-last-error"></p>
+    </details>
+  </form>
+</dialog>
+
+<script src="/assets/app.js"></script>
+</body>
+</html>

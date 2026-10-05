@@ -68,10 +68,35 @@ wrong; only `cvai-bench` can suggest one is right.
 
 ## `web/` — the frontend
 
-**`dev-client.html` works today.** One file, no build step, no dependencies: open it in a
-browser, point it at the API, and talk to the character — by typing, or by pressing 开麦
-and speaking. Captions and audio come back, barge-in works from the Esc key and from
-simply talking over her.
+**The app (`index.html` + `assets/app.css` + `assets/app.js`) is served at `/`.** No build
+step and no dependencies. It keeps three kinds of state apart and renders each on its own:
+
+| | States | Shown in |
+|---|---|---|
+| Connection | connecting · connected · degraded (LLM down) · disconnected | top bar pill |
+| Microphone | off · pending (permission) · on — the media track really stops when off | status chip, mic button |
+| Conversation (`VoiceState`) | idle · requesting_mic_permission · listening · speech_detected · transcribing · thinking · generating_speech · speaking · error | status bar, character header |
+
+Voice turns are one utterance each: press the mic, speak, press 完成 (or pause — the
+server's silence detector ends it). The microphone closes as soon as the utterance ends,
+the transcript appears as your message, and the status bar walks through 正在识别语音 →
+正在思考 → 正在生成语音 → 正在说话 → 准备就绪. Errors appear next to the composer with a
+retry. Per-turn timings are under Settings → 开发者信息. `window.__voice.log` records
+every state transition, which the browser tests read.
+
+**`dev-client.html` is at `/dev`**: the original pipeline client, which shows raw server
+states and keeps the microphone open continuously for barge-in.
+
+Protocol additions the app relies on (server → client):
+
+| Message | Meaning |
+|---|---|
+| `{"type": "vad", "event": "speech_start"}` | the server's detector heard speech |
+| `{"type": "state", "state": "transcribing"}` | an utterance is complete and being transcribed |
+| `{"type": "error", "code": "no_speech"}` | nothing recognisable was said; no turn runs |
+
+and client → server, `user_audio_begin` accepts `"mode": "turn"`: the server stops
+listening after one utterance instead of staying open (the default, `continuous`).
 
 Microphone capture runs in an AudioWorklet (on the audio thread, so layout on the main
 thread cannot swallow the first syllable of a sentence), resamples to 16 kHz, and streams

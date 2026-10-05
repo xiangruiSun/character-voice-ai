@@ -162,8 +162,8 @@ cvai-talk denia_cn                                  # from the terminal
 cvai-talk denia_cn --audition                       # one line per style, side by side
 
 pip install -e '.[runtime]'
-uvicorn cvai_api.app:app --port 8000
-open apps/web/dev-client.html          # type, or press 开麦 and speak
+cvai-api --port 8000
+# open http://127.0.0.1:8000/  — type, or press the mic and speak (/dev: raw pipeline client)
 ```
 
 ---

@@ -104,6 +104,18 @@ class SessionManager:
     def available_characters(self) -> list[str]:
         return self._characters.list_ids()
 
+    def character_details(self) -> list[dict[str, str]]:
+        """Ids with display names, for a character picker. Unloadable profiles are
+        left out rather than failing the whole list."""
+        details = []
+        for character_id in self._characters.list_ids():
+            try:
+                name = self._characters.get(character_id).character_name
+            except CVAIError:
+                continue
+            details.append({"id": character_id, "name": name})
+        return details
+
     # -- lifecycle -------------------------------------------------------------------
 
     def create(

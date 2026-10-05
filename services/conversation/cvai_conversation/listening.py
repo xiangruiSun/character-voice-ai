@@ -330,6 +330,9 @@ class VoiceLoop:
         # Character and world proper nouns. Generic Chinese ASR mangles them, and a
         # mangled name means the LLM answers a question the user did not ask.
         self.hotwords = list(hotwords or _profile_hotwords(orchestrator))
+        #: Detector events from the most recent :meth:`observe` call, so a transport can
+        #: tell its client "speech started" without a second detector of its own.
+        self.last_events: list[ListenerEvent] = []
 
     async def observe(self, payload: bytes) -> list[list[float]]:
         """Take one chunk of microphone PCM; return any finished utterances.
@@ -343,6 +346,7 @@ class VoiceLoop:
             ConversationState.SYNTHESIZING,
         )
         events = self.detector.feed_pcm16(payload, character_is_speaking=speaking)
+        self.last_events = list(events)
 
         utterances: list[list[float]] = []
         for event in events:
