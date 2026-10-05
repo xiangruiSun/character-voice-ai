@@ -1,6 +1,6 @@
 # Character Voice AI (Chinese, V1)
 
-**Author:** andersonmork817 · MIT licensed (code only — see `LICENSE` for what that does
+**Author:** [xiangruiSun](https://github.com/xiangruiSun) · MIT licensed (code only — see `LICENSE` for what that does
 and does not cover)
 
 Build a **character-specific** Chinese voice — not generic TTS, and not ten-second
