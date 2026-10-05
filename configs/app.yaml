@@ -4,7 +4,7 @@
 # --set overrides on the command line. ${VAR} and ${VAR:-default} are expanded at
 # load time, so secrets stay out of the repository.
 
-default_character: denia_cn
+default_character: cartethyia_cn
 log_level: INFO
 
 paths:
@@ -40,7 +40,7 @@ providers:
         enabled: true
         options:
           base_url: ${GPT_SOVITS_URL:-http://127.0.0.1:9880}
-          engine_version: v4
+          engine_version: v2ProPlus
           # Defaults mirror api_v2.py; override per candidate in the benchmark.
           top_k: 15
           top_p: 1.0
@@ -49,7 +49,7 @@ providers:
           speed_factor: 1.0
           repetition_penalty: 1.35
           sample_steps: 32
-          native_sample_rate: 48000
+          native_sample_rate: 32000
 
       qwen3_tts:
         type: qwen3_tts
@@ -109,8 +109,25 @@ providers:
           device: ${CVAI_ASR_DEVICE:-cpu}
 
   llm:
-    active: ${CVAI_LLM:-openai}
+    # LLM_PROVIDER picks an instance below (CVAI_LLM is accepted as an alias). The
+    # default is local Qwen3 through Ollama: no API key, no per-token cost.
+    active: ${LLM_PROVIDER:-ollama}
     instances:
+      ollama:
+        type: ollama
+        options:
+          model: ${LLM_MODEL:-qwen3:4b}
+          # 127.0.0.1 rather than localhost: on Windows "localhost" can resolve to ::1
+          # first, while Ollama listens on IPv4 only.
+          base_url: ${OLLAMA_BASE_URL:-http://127.0.0.1:11434}
+          temperature: 0.7
+          max_output_tokens: 400
+          # qwen3:4b always reasons first; with think on, Ollama returns the reasoning
+          # separately and only the answer is streamed. Off, it leaks into the answer.
+          think: ${OLLAMA_THINK:-true}
+          thinking_token_budget: 4096
+          num_ctx: ${OLLAMA_NUM_CTX:-8192}
+          keep_alive: 30m
       # Scripted replies, no key and no network — `CVAI_LLM=mock cvai-talk demo_zh`
       # exercises the whole pipeline offline. It is not a language model and says so.
       mock:
@@ -118,7 +135,28 @@ providers:
       openai:
         type: openai
         options:
-          model: gpt-4o
+          model: ${OPENAI_MODEL:-gpt-4o}
           api_key: ${OPENAI_API_KEY:-}
+          temperature: 0.8
+          max_output_tokens: 400
+      # Google Gemini free tier (key from https://aistudio.google.com/apikey) through
+      # its OpenAI-compatible endpoint. Gemini 3 always thinks; "low" keeps it quick.
+      gemini:
+        type: openai
+        options:
+          model: ${GEMINI_MODEL:-gemini-3.8-flash}
+          api_key: ${GEMINI_API_KEY:-}
+          base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+          temperature: 0.8
+          max_output_tokens: 400
+          reasoning_effort: ${GEMINI_REASONING:-low}
+      # Any model on OpenRouter through its OpenAI-compatible API. `:free` models cost
+      # nothing (rate-limited); e.g. OPENROUTER_MODEL=moonshotai/kimi-k2-0905 for Kimi.
+      openrouter:
+        type: openai
+        options:
+          model: ${OPENROUTER_MODEL:-google/gemma-4-31b-it:free}
+          api_key: ${OPENROUTER_API_KEY:-}
+          base_url: https://openrouter.ai/api/v1
           temperature: 0.8
           max_output_tokens: 400

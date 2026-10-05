@@ -325,6 +325,8 @@
   // -- session ---------------------------------------------------------------
 
   async function loadCharacters() {
+    // Served by the API itself: talk to the same origin, whatever port it is on.
+    if (location.protocol.indexOf("http") === 0) { $("api").value = location.origin; }
     try {
       const response = await fetch($("api").value + "/characters");
       const data = await response.json();

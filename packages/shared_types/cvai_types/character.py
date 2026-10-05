@@ -79,6 +79,10 @@ class LLMSettings(CVAIModel):
     #: Hard cap on generated line length. Long lines break the illusion and make TTS
     #: chunking worse; spec §27 lists "extremely long TTS chunks" as a failure mode.
     max_chars_per_reply: int = Field(default=120, ge=10, le=2000)
+    #: Whether a reply over ``max_chars_per_reply`` is cut at a sentence boundary. The
+    #: limit is always given to the LLM as an instruction; with this off, a reply that
+    #: overruns it is kept whole (and logged), so every word the LLM writes is spoken.
+    truncate_long_replies: bool = True
 
 
 class CharacterProfile(CVAIModel):

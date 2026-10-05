@@ -55,5 +55,13 @@ class LLMProvider(abc.ABC):
             "the planner needs a parse-and-repair fallback for this provider"
         )
 
+    async def check(self) -> dict[str, Any]:
+        """Readiness for a health endpoint: ``{"ok": bool, ...}``, never raises.
+
+        Providers with a backend to probe (a local server, a model to download)
+        override this so a setup problem is reported before the first chat fails.
+        """
+        return {"ok": True, "provider": self.provider}
+
     async def aclose(self) -> None:
         return None

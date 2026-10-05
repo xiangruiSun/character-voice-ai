@@ -19,6 +19,10 @@ from cvai_core.registry import LLM_PROVIDERS
 from cvai_types import LLMCapabilities, LLMMessage, LLMResponse, LLMStreamChunk, LLMUsage
 
 
+#: Model families that only accept the default temperature.
+_REASONING_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+
 @LLM_PROVIDERS.register("openai")
 class OpenAILLMProvider(LLMProvider):
     provider = "openai"
@@ -33,8 +37,12 @@ class OpenAILLMProvider(LLMProvider):
         max_output_tokens: int = 400,
         timeout_s: float = 60.0,
         max_context_tokens: int = 128000,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.model = model
+        #: For thinking models behind OpenAI-compatible APIs (e.g. Gemini 3, which
+        #: cannot switch thinking off): "low" keeps replies quick.
+        self.reasoning_effort = reasoning_effort
         self.api_key = api_key
         self.base_url = base_url
         self.temperature = temperature
@@ -69,6 +77,29 @@ class OpenAILLMProvider(LLMProvider):
         self._client = AsyncOpenAI(**kwargs)
         return self._client
 
+    def _sampling(
+        self, temperature: float | None, max_output_tokens: int | None
+    ) -> dict[str, Any]:
+        """Sampling arguments the configured model accepts.
+
+        Reasoning models (gpt-5, o-series) reject ``temperature`` and count hidden
+        reasoning against the token budget, so they get no temperature and a budget
+        large enough that the visible reply is not starved.
+        """
+        budget = max_output_tokens or self.max_output_tokens
+        if self.model.startswith(_REASONING_PREFIXES):
+            return {"max_completion_tokens": max(budget, 4000)}
+        if self.reasoning_effort:
+            return {
+                "temperature": self.temperature if temperature is None else temperature,
+                "max_completion_tokens": max(budget, 4000),
+                "reasoning_effort": self.reasoning_effort,
+            }
+        return {
+            "temperature": self.temperature if temperature is None else temperature,
+            "max_completion_tokens": budget,
+        }
+
     @staticmethod
     def _dump(messages: list[LLMMessage]) -> list[dict[str, str]]:
         return [{"role": m.role.value, "content": m.content} for m in messages]
@@ -85,8 +116,7 @@ class OpenAILLMProvider(LLMProvider):
         response = await client.chat.completions.create(
             model=self.model,
             messages=self._dump(messages),
-            temperature=self.temperature if temperature is None else temperature,
-            max_tokens=max_output_tokens or self.max_output_tokens,
+            **self._sampling(temperature, max_output_tokens),
         )
         choice = response.choices[0]
         usage = getattr(response, "usage", None)
@@ -113,8 +143,7 @@ class OpenAILLMProvider(LLMProvider):
         stream = await client.chat.completions.create(
             model=self.model,
             messages=self._dump(messages),
-            temperature=self.temperature if temperature is None else temperature,
-            max_tokens=max_output_tokens or self.max_output_tokens,
+            **self._sampling(temperature, max_output_tokens),
             stream=True,
         )
         async for event in stream:
@@ -139,7 +168,7 @@ class OpenAILLMProvider(LLMProvider):
         response = await client.chat.completions.create(
             model=self.model,
             messages=self._dump(messages),
-            temperature=self.temperature if temperature is None else temperature,
+            **self._sampling(temperature, None),
             response_format={
                 "type": "json_schema",
                 "json_schema": {

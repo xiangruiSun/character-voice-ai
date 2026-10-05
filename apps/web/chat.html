@@ -1,0 +1,139 @@
+<!doctype html>
+<!--
+  Minimal local-LLM chat. Served by the API at http://127.0.0.1:8000/chat.
+
+  Browser → FastAPI (/api/chat/stream, Server-Sent Events) → LLMProvider → Ollama → Qwen3.
+  Every URL here is relative: the page never knows which model or runtime answers.
+  The server keeps no chat state; the page sends the whole history each turn.
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local LLM Chat</title>
+<style>
+  body { font: 15px/1.6 system-ui, "Microsoft YaHei", sans-serif; max-width: 760px; margin: 0 auto; padding: 16px; }
+  textarea, input { font: inherit; width: 100%; box-sizing: border-box; }
+  #log { border: 1px solid #ccc; border-radius: 6px; padding: 8px; height: 50vh; overflow-y: auto; margin: 8px 0; }
+  .msg { margin: 6px 0; white-space: pre-wrap; }
+  .user b { color: #0a58ca; } .assistant b { color: #198754; }
+  .error { color: #b02a37; }
+  #stats, #health { color: #666; font-size: 13px; }
+  .row { display: flex; gap: 8px; } .row input { flex: 1; }
+</style>
+</head>
+<body>
+<h3>Local LLM Chat <span id="health">checking…</span></h3>
+
+<label>System prompt（角色设定，可留空）</label>
+<textarea id="system" rows="3">你正在扮演游戏《鸣潮》中的角色卡提希娅。说话温和、礼貌，带一点迟疑，常用省略号。称呼对方为“漂泊者”。每次回复不超过三句话。</textarea>
+
+<div id="log"></div>
+<div class="row">
+  <input id="input" placeholder="输入消息，回车发送" autocomplete="off">
+  <button id="send">发送</button>
+  <button id="stop" disabled>停止</button>
+  <button id="clear">清空</button>
+</div>
+<div id="stats"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let history = [];          // [{role, content}] — user/assistant turns only
+let controller = null;     // AbortController for the in-flight stream
+
+function addMessage(cls, label, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + cls;
+  div.innerHTML = "<b></b> <span></span>";
+  div.querySelector("b").textContent = label;
+  div.querySelector("span").textContent = text;
+  $("log").appendChild(div);
+  $("log").scrollTop = $("log").scrollHeight;
+  return div.querySelector("span");
+}
+
+async function checkHealth() {
+  try {
+    const r = await fetch("/api/llm/health");
+    const h = await r.json();
+    $("health").textContent = h.ok ? `· ${h.provider} / ${h.model} ✓` : `· ✗ ${h.error}`;
+  } catch (e) {
+    $("health").textContent = "· ✗ backend unreachable";
+  }
+}
+
+async function send() {
+  const text = $("input").value.trim();
+  if (!text || controller) return;
+  $("input").value = "";
+  addMessage("user", "你:", text);
+  history.push({ role: "user", content: text });
+
+  const messages = [];
+  const system = $("system").value.trim();
+  if (system) messages.push({ role: "system", content: system });
+  messages.push(...history);
+
+  const out = addMessage("assistant", "AI:", "");
+  let answer = "";
+  controller = new AbortController();
+  $("send").disabled = true; $("stop").disabled = false; $("stats").textContent = "生成中…";
+
+  try {
+    const response = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      const d = body.detail || {};
+      throw new Error(d.error || (typeof d === "string" ? d : JSON.stringify(body)) || response.statusText);
+    }
+    // Parse Server-Sent Events from the fetch body (EventSource cannot POST).
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf("\n\n")) >= 0) {
+        const block = buffer.slice(0, cut); buffer = buffer.slice(cut + 2);
+        const event = (block.match(/^event: (.*)$/m) || [])[1];
+        const data = JSON.parse((block.match(/^data: (.*)$/m) || [, "{}"])[1]);
+        if (event === "delta") { answer += data.text; out.textContent = answer; $("log").scrollTop = $("log").scrollHeight; }
+        if (event === "error") throw new Error(data.error);
+        if (event === "done") {
+          const s = data.stats || {}, u = data.usage || {};
+          $("stats").textContent = `首字 ${(data.first_token_ms / 1000).toFixed(2)}s · 总计 ${(data.total_ms / 1000).toFixed(2)}s · ` +
+            `${u.completion_tokens ?? "?"} tokens（含思考）· ${s.tokens_per_s ?? "?"} tok/s`;
+        }
+      }
+    }
+    history.push({ role: "assistant", content: answer });
+  } catch (e) {
+    if (e.name === "AbortError") {
+      $("stats").textContent = "已停止";
+      if (answer) history.push({ role: "assistant", content: answer });
+    } else {
+      addMessage("error", "错误:", e.message);
+      $("stats").textContent = "";
+      history.pop();  // drop the unanswered user turn so a retry does not repeat it
+    }
+  } finally {
+    controller = null; $("send").disabled = false; $("stop").disabled = true; $("input").focus();
+  }
+}
+
+$("send").onclick = send;
+$("input").onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) send(); };
+$("stop").onclick = () => controller && controller.abort();
+$("clear").onclick = () => { history = []; $("log").innerHTML = ""; $("stats").textContent = ""; };
+checkHealth();
+</script>
+</body>
+</html>

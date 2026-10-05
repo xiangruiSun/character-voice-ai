@@ -37,6 +37,8 @@ from typing import Any
 
 from cvai_conversation import OrchestratorConfig
 from cvai_core.errors import CVAIError
+from cvai_core.paths import repo_root
+from cvai_core.registry import build_llm_provider
 from cvai_types import InterruptReason, InterruptSignal, TurnEventType
 
 from .events import to_server_messages
@@ -52,7 +54,10 @@ log = logging.getLogger("cvai-api")
 # routes keep working, so it looks like a transport problem rather than a typing one.
 try:  # pragma: no cover - import shape depends on the installed extras
     from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+    from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, JSONResponse
+
+    from .chat import build_chat_router
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -76,6 +81,15 @@ def create_app(
         config_path,
         orchestrator_config=orchestrator_config or OrchestratorConfig(),
     )
+    # One provider for /api/chat, built from config on first use so the app still starts
+    # (and reports why) when the configured backend is unavailable.
+    chat_llm: list[Any] = []
+
+    def get_chat_llm() -> Any:
+        if not chat_llm:
+            chat_llm.append(build_llm_provider(sessions.config))
+        return chat_llm[0]
+
     @contextlib.asynccontextmanager
     async def lifespan(_: Any):
         # Modern lifespan rather than @app.on_event: the latter is deprecated, and
@@ -83,11 +97,32 @@ def create_app(
         # should not be teaching people to ignore.
         yield
         await sessions.close_all()
+        if chat_llm:
+            await chat_llm[0].aclose()
 
     app = FastAPI(title="Character Voice AI", version="0.1.0", lifespan=lifespan)
     app.state.sessions = sessions
+    app.include_router(build_chat_router(get_chat_llm))
+    # The dev client is often opened straight from disk (Origin: null) or from another
+    # local port; without CORS the browser blocks every call before it reaches a route.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^(null|https?://(localhost|127\.0\.0\.1)(:\d+)?)$",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # -- basics -------------------------------------------------------------------
+
+    @app.get("/chat", include_in_schema=False)
+    def chat_page() -> Any:
+        # Plain local-LLM chat: Browser → FastAPI (/api/chat/stream) → LLMProvider.
+        return FileResponse(repo_root() / "apps" / "web" / "chat.html")
+
+    @app.get("/", include_in_schema=False)
+    def dev_client() -> Any:
+        # Serving the page from the API makes it same-origin: open http://127.0.0.1:8000/
+        return FileResponse(repo_root() / "apps" / "web" / "dev-client.html")
 
     @app.get("/health")
     def health() -> dict[str, Any]:

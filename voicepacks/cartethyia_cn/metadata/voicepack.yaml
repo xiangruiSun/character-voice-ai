@@ -1,0 +1,44 @@
+voicepack_id: cartethyia_cn
+version: 0.1.0
+character_id: cartethyia_cn
+display_name: 卡提希娅 (Cartethyia)
+language: zh-CN
+created_at: '2026-10-05T18:05:08.711136+00:00'
+source:
+  description: AI Hobbyist dataset, imported from cartethyia
+  game_or_media: 鸣潮 (Wuthering Waves)
+  extraction_tool: AI Hobbyist dataset (wav + lab)
+  license_note: Game voice lines; personal, non-commercial use only.
+  consent_confirmed: false
+styles:
+- name: neutral
+  core_style: neutral
+  description: 平常语气，叙述与回答
+  example_line: ''
+  emotion_vector: null
+  instruct: null
+  typical_speaking_rate: normal
+  typical_pitch_profile: mid
+- name: soft
+  core_style: soft
+  description: 迟疑、轻声，带停顿
+  example_line: ''
+  emotion_vector: null
+  instruct: null
+  typical_speaking_rate: normal
+  typical_pitch_profile: mid
+- name: excited
+  core_style: excited
+  description: 急促、提高音量
+  example_line: ''
+  emotion_vector: null
+  instruct: null
+  typical_speaking_rate: normal
+  typical_pitch_profile: mid
+checkpoints: []
+target_sample_rate: 44100
+target_lufs: -20.0
+enable_source_separation: false
+enable_dereverb: false
+enable_denoise: false
+notes: ''

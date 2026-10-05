@@ -226,6 +226,25 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def load_dotenv(path: Path) -> None:
+    """Read ``KEY=value`` lines from a git-ignored ``.env`` into ``os.environ``.
+
+    Variables already set in the real environment win, so a shell export still
+    overrides the file. Keeps API keys out of shell history and config files.
+    """
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip().removeprefix("export ").strip()
+        value = value.strip().strip('"').strip("'")
+        if key and value:
+            os.environ.setdefault(key, value)
+
+
 def load_config(
     paths: list[Path] | None = None,
     overrides: dict[str, Any] | None = None,
@@ -239,6 +258,8 @@ def load_config(
     from .paths import repo_root  # local import: paths imports errors, not config
 
     files = paths if paths is not None else [repo_root() / "configs" / "app.yaml"]
+    if env is None:
+        load_dotenv(repo_root() / ".env")
 
     merged: dict[str, Any] = {}
     for file in files:
@@ -249,7 +270,12 @@ def load_config(
     if overrides:
         merged = _deep_merge(merged, overrides)
 
-    merged = interpolate(merged, env)
+    environment = dict(env if env is not None else os.environ)
+    # LLM_PROVIDER is the documented switch; CVAI_LLM is the older spelling the
+    # Makefile and docs still use (`CVAI_LLM=mock make talk`), kept as an alias.
+    if "CVAI_LLM" in environment:
+        environment.setdefault("LLM_PROVIDER", environment["CVAI_LLM"])
+    merged = interpolate(merged, environment)
 
     try:
         config = AppConfig.model_validate(merged)

@@ -50,6 +50,10 @@ class LLMStreamChunk(CVAIModel):
     delta: str = ""
     is_final: bool = False
     finish_reason: str | None = None
+    #: Only on the final chunk, and only where the provider reports it.
+    usage: LLMUsage | None = None
+    #: Provider timing on the final chunk, e.g. ``tokens_per_s``, ``load_s``.
+    stats: dict[str, float] = Field(default_factory=dict)
 
 
 class LLMCapabilities(CVAIModel):

@@ -285,9 +285,13 @@ def test_objective_report_renders_and_says_what_it_is_not(scored_run):
     assert "listening test decides" in text
 
 
-def test_missing_model_backends_are_reported_not_hidden():
+def test_missing_model_backends_are_reported_not_hidden(monkeypatch):
+    from cvai_voice_preprocessing.backends import CamPlusPlusSpeakerBackend, FunASRTranscriber
+
+    # Make SECS / CER missing even where FunASR is installed; TTSDS2 never is here.
+    for backend in (CamPlusPlusSpeakerBackend, FunASRTranscriber):
+        monkeypatch.setattr(backend, "available", lambda self: False)
     backends = resolve_objective_backends()
-    # None of SECS / CER / TTSDS2 are installed here, and each should say so.
     assert backends.notes
     assert any("SECS" in note or "speaker similarity" in note for note in backends.notes)
     assert any("TTSDS2" in note for note in backends.notes)

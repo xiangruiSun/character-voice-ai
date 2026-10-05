@@ -221,6 +221,19 @@ def test_overlong_replies_are_cut_at_a_sentence_boundary():
     assert any("truncated" in r for r in report.repairs)
 
 
+def test_overlong_replies_are_kept_whole_when_truncation_is_off():
+    """A voice chat that must say every word the LLM wrote."""
+    profile = make_profile()
+    profile = profile.model_copy(update={"llm": profile.llm.model_copy(
+        update={"max_chars_per_reply": 20, "truncate_long_replies": False})})
+    text = "第一句话很短。第二句话也不长。第三句话就超出去了，但要完整保留。"
+    guarded, report = apply_guards(CharacterSpeechPlan(text=text), profile)
+
+    assert guarded.text == text
+    assert not any("truncated" in r for r in report.repairs)
+    assert any("kept whole" in w for w in report.warnings)
+
+
 def test_narration_in_brackets_is_removed():
     plan = CharacterSpeechPlan(text="（她转过身）我不去。")
     guarded, report = apply_guards(plan, make_profile())

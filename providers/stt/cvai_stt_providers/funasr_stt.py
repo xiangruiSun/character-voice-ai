@@ -110,8 +110,8 @@ class FunASRSTTProvider(SpeechToTextProvider):
             segments.append(
                 TranscriptSegment(
                     text=result.text,
-                    start_s=min(t.start_s for t in timings),
-                    end_s=max(t.end_s for t in timings),
+                    start_s=min(t.start_ms for t in timings) / 1000.0,
+                    end_s=max(t.end_ms for t in timings) / 1000.0,
                     confidence=getattr(result, "confidence", None),
                 )
             )

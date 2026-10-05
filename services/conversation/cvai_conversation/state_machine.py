@@ -56,8 +56,10 @@ class StateMachine:
         guard turning a bug into a deadlock — but it is a separate method, so forcing
         shows up in review rather than hiding inside ordinary flow.
         """
+        # Provider errors (e.g. a full OpenAI 429 body) easily exceed the 200-char field;
+        # failing validation here would turn an error report into a hung turn.
         transition = StateTransition(
-            from_state=self._state, to_state=target, reason=f"forced: {reason}"
+            from_state=self._state, to_state=target, reason=f"forced: {reason}"[:200]
         )
         self._history.append(transition)
         self._state = target

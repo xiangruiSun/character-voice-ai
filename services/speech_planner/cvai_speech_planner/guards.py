@@ -87,8 +87,14 @@ def apply_guards(
 
     limit = profile.llm.max_chars_per_reply
     if len(text) > limit:
-        text = _truncate_at_sentence(text, limit)
-        report.repairs.append(f"truncated to {limit} characters at a sentence boundary")
+        if profile.llm.truncate_long_replies:
+            text = _truncate_at_sentence(text, limit)
+            report.repairs.append(f"truncated to {limit} characters at a sentence boundary")
+        else:
+            report.warnings.append(
+                f"reply is {len(text)} characters, over the {limit} asked for; "
+                "kept whole because truncate_long_replies is off"
+            )
 
     if not text.strip():
         report.warnings.append("plan had no speakable text")

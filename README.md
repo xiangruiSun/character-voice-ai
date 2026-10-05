@@ -198,6 +198,8 @@ load time, so no secret is ever written into a config file.
 
 | Document | What it covers |
 |---|---|
+| `docs/VOICE_TRAINING.md` | **Trained voice** — fine-tuning GPT-SoVITS on a character's lines, results, and the every-word-spoken check |
+| `docs/LOCAL_LLM.md` | **Local chat model** — Qwen3 4B through Ollama behind `/api/chat`, no API key; setup, tests, performance |
 | `docs/GETTING_STARTED.md` | **Start here** — the path from a folder of voice lines to a character who talks back, with the decisions you have to make on the way |
 | `docs/IMPLEMENTATION_PLAN.md` | All 14 milestones, and the eight architectural decisions fixed in Milestone 1 |
 | `docs/TECH_LANDSCAPE.md` | The open-source survey behind those decisions, with sources |

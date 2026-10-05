@@ -92,6 +92,26 @@ def make_speechlike(
     return path
 
 
+@pytest.fixture(autouse=True)
+def builtin_backends_only(monkeypatch):
+    """Pin the deterministic built-in backends, whatever is installed.
+
+    With FunASR / Silero installed (`make install-preprocess`, or the mic's local
+    STT), backend resolution would otherwise pick real models: minutes of model loading
+    per test, and real transcripts where these tests expect the stub's placeholders.
+    """
+    from cvai_voice_preprocessing.backends import (
+        CamPlusPlusSpeakerBackend,
+        Emotion2VecBackend,
+        FunASRTranscriber,
+        SileroVADBackend,
+    )
+
+    for backend in (FunASRTranscriber, CamPlusPlusSpeakerBackend,
+                    Emotion2VecBackend, SileroVADBackend):
+        monkeypatch.setattr(backend, "available", lambda self: False)
+
+
 @pytest.fixture
 def pack(tmp_path: Path) -> VoicePackPaths:
     paths = VoicePackPaths(tmp_path / "voicepacks" / "test_pack")

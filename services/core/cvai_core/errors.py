@@ -41,5 +41,10 @@ class SynthesisError(CVAIError):
     """A TTS request failed."""
 
 
+class GenerationError(CVAIError):
+    """An LLM request reached a working provider and still failed (OOM, timeout, a
+    model that would not load). Setup problems are ``ProviderUnavailableError``."""
+
+
 class UnsupportedFeatureError(CVAIError):
     """A provider was asked for something its capabilities do not claim."""
