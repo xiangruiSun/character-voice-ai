@@ -74,9 +74,13 @@ def create_app(
     *,
     config_path: Path | None = None,
     orchestrator_config: OrchestratorConfig | None = None,
+    studio: bool | None = None,
 ) -> Any:
     if not FASTAPI_AVAILABLE:  # pragma: no cover - depends on extras
         raise SystemExit(_MISSING_FASTAPI)
+    # The Studio (database, training, model connections) is on for the real app and
+    # off for tests that assemble the app around their own SessionManager.
+    studio_enabled = studio if studio is not None else manager is None
 
     sessions = manager or SessionManager.from_config_file(
         config_path,
@@ -96,6 +100,11 @@ def create_app(
         # Modern lifespan rather than @app.on_event: the latter is deprecated, and
         # a DeprecationWarning in a library is a warning the project's own tests
         # should not be teaching people to ignore.
+        if studio_enabled:
+            from cvai_studio.services.context import get_studio
+            from cvai_studio.services.seed import seed
+
+            seed(get_studio())                  # migrates the schema, imports old setup once
         yield
         await sessions.close_all()
         if chat_llm:
@@ -104,6 +113,13 @@ def create_app(
     app = FastAPI(title="Character Voice AI", version="0.1.0", lifespan=lifespan)
     app.state.sessions = sessions
     app.include_router(build_chat_router(get_chat_llm))
+    if studio_enabled:
+        from cvai_studio.api.routes import ROUTERS, service_error_handler
+        from cvai_studio.services.context import ServiceError
+
+        for router in ROUTERS:
+            app.include_router(router)
+        app.add_exception_handler(ServiceError, service_error_handler)
     # The dev client is often opened straight from disk (Origin: null) or from another
     # local port; without CORS the browser blocks every call before it reaches a route.
     app.add_middleware(
@@ -115,7 +131,7 @@ def create_app(
 
     # -- basics -------------------------------------------------------------------
 
-    @app.get("/chat", include_in_schema=False)
+    @app.get("/classic/chat", include_in_schema=False)
     def chat_page() -> Any:
         # Plain local-LLM chat: Browser → FastAPI (/api/chat/stream) → LLMProvider.
         return FileResponse(repo_root() / "apps" / "web" / "chat.html")
@@ -124,8 +140,9 @@ def create_app(
     # The app is served from the API so it is same-origin: http://127.0.0.1:8000/
     app.mount("/assets", StaticFiles(directory=web / "assets", check_dir=False), name="assets")
 
-    @app.get("/", include_in_schema=False)
+    @app.get("/classic", include_in_schema=False)
     def web_app() -> Any:
+        # The single-page voice chat that preceded the Studio.
         return FileResponse(web / "index.html")
 
     @app.get("/dev", include_in_schema=False)
@@ -154,12 +171,33 @@ def create_app(
     @app.post("/sessions")
     def open_session(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = payload or {}
+        labels: dict[str, Any] = {}
         try:
-            session = sessions.create(
-                payload.get("character_id"),
-                engine=payload.get("engine"),
-                enable_barge_in=bool(payload.get("enable_barge_in", True)),
-            )
+            if payload.get("studio_character_id") and studio_enabled:
+                # A Studio character: its own model connection, voice model, prompt.
+                from cvai_studio.services.characters import CharacterService
+                from cvai_studio.services.context import ServiceError, get_studio
+
+                studio_ctx = get_studio()
+                try:
+                    with studio_ctx.db() as db:
+                        parts = CharacterService(studio_ctx, db).session_parts(
+                            payload["studio_character_id"])
+                except ServiceError as exc:
+                    raise HTTPException(status_code=exc.status if exc.status != 404 else 404,
+                                        detail={"message": exc.message, "hint": exc.hint}) from exc
+                session = sessions.create_from_parts(
+                    parts.profile, parts.voicepack_root, parts.llm,
+                    checkpoint_id=parts.checkpoint_id,
+                    enable_barge_in=bool(payload.get("enable_barge_in", True)),
+                )
+                labels = {"model_label": parts.model_label, "voice_label": parts.voice_label}
+            else:
+                session = sessions.create(
+                    payload.get("character_id"),
+                    engine=payload.get("engine"),
+                    enable_barge_in=bool(payload.get("enable_barge_in", True)),
+                )
         except CVAIError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
@@ -168,6 +206,7 @@ def create_app(
             "character_name": session.profile.character_name,
             "engine": session.engine,
             "state": session.orchestrator.state.value,
+            **labels,
         }
 
     @app.delete("/sessions/{session_id}")
@@ -392,7 +431,52 @@ def create_app(
                 )
                 await asyncio.gather(turn_task, return_exceptions=True)
 
+    studio_web = repo_root() / "apps" / "studio" / "out"
+    if studio_web.is_dir():
+        app.mount("/", _StudioFiles(directory=studio_web, html=True), name="studio")
+    else:
+        @app.get("/", include_in_schema=False)
+        def studio_missing() -> Any:
+            return FileResponse(web / "index.html")
+
     return app
+
+
+if FASTAPI_AVAILABLE:
+    class _StudioFiles(StaticFiles):
+        """Static export server that also finds Next's segment payloads.
+
+        The client router requests ``chat/__next.chat.__PAGE__.txt``; the export writes
+        it as ``chat/__next.chat/__PAGE__.txt``. Without this mapping every client-side
+        navigation 404s and silently falls back to a full page load.
+        """
+
+        async def get_response(self, path, scope):  # type: ignore[override]
+            from starlette.exceptions import HTTPException as StarletteHTTPException
+
+            async def attempt(target: str):
+                # html=True answers a miss with 404.html (status 404) or raises 404.
+                try:
+                    found = await super(_StudioFiles, self).get_response(target, scope)
+                except StarletteHTTPException as exc:
+                    if exc.status_code != 404:
+                        raise
+                    return None
+                return found if found.status_code != 404 else None
+
+            response = await attempt(path)
+            if response is not None:
+                return response
+            name = Path(path).name
+            if name.startswith("__next."):
+                stem, _, suffix = name.rpartition(".")
+                dots = [i for i, ch in enumerate(stem) if ch == "."]
+                for index in reversed(dots[1:]):      # keep the "__next." prefix intact
+                    candidate = Path(path).parent / f"{stem[:index]}/{stem[index + 1:]}.{suffix}"
+                    found = await attempt(candidate.as_posix())
+                    if found is not None:
+                        return found
+            return await super().get_response(path, scope)   # the normal 404 page
 
 
 def _audio_url(session_id: str, orchestrator, audio_path: str | None) -> str | None:

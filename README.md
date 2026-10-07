@@ -132,6 +132,16 @@ listening, not by a leaderboard.
 
 ---
 
+## Character AI Studio (the website)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start_studio.ps1   # → http://127.0.0.1:8000/
+```
+
+Connect a model (local Ollama or any OpenAI-compatible API) → upload a character's
+Chinese voice lines → review, train and test the voice → build a character → talk to it
+by text or voice. See `docs/STUDIO.md`.
+
 ## Running things
 
 ```bash
@@ -198,6 +208,7 @@ load time, so no secret is ever written into a config file.
 
 | Document | What it covers |
 |---|---|
+| `docs/STUDIO.md` | **Character AI Studio** — the website: connect models, create voices, build characters, chat; startup, architecture, API |
 | `docs/VOICE_TRAINING.md` | **Trained voice** — fine-tuning GPT-SoVITS on a character's lines, results, and the every-word-spoken check |
 | `docs/LOCAL_LLM.md` | **Local chat model** — Qwen3 4B through Ollama behind `/api/chat`, no API key; setup, tests, performance |
 | `docs/GETTING_STARTED.md` | **Start here** — the path from a folder of voice lines to a character who talks back, with the decisions you have to make on the way |

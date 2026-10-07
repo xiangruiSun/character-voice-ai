@@ -52,3 +52,10 @@ out/
 .idea/
 .vscode/
 *.swp
+
+# Character AI Studio runtime data: database, uploads, checkpoints and the key that
+# decrypts stored API keys. Never commit.
+/data/
+
+# Portable Redis and other local tools (scripts/install_redis_portable.ps1)
+/tools/

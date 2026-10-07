@@ -40,8 +40,11 @@ def render_system_prompt(
     include_format_instructions: bool = True,
 ) -> str:
     """Assemble the system prompt for one turn."""
-    parts: list[str] = [f"你是{profile.character_name}。请始终以她的身份说话。"]
+    parts: list[str] = [f"你是{profile.character_name}。请始终以{profile.character_name}的身份说话。"]
 
+    if profile.system_prompt.strip():
+        # Written by the user in the Studio's character builder; taken as given.
+        parts.append(_SECTION.format(title="角色设定", body=profile.system_prompt.strip()))
     if profile.personality:
         parts.append(_SECTION.format(title="性格", body=_bullets(profile.personality)))
     if profile.background.strip():

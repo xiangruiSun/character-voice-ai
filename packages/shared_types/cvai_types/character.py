@@ -97,6 +97,9 @@ class CharacterProfile(CVAIModel):
         description="Short traits, each one sentence or less.",
     )
     background: str = Field(default="", max_length=4000)
+    #: Free-form personality/role prompt (the Studio's character builder). Added to
+    #: the system prompt as written, alongside the structured fields.
+    system_prompt: str = Field(default="", max_length=8000)
     world_knowledge: list[str] = Field(
         default_factory=list,
         description="Facts the character knows about her world. Also acts as a boundary: "

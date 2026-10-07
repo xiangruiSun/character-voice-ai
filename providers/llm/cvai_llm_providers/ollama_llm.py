@@ -285,6 +285,18 @@ class OllamaLLMProvider(LLMProvider):
                 f"{content[:200]!r}"
             ) from exc
 
+    async def list_models(self) -> list[str]:
+        response = await self._http().get("/api/tags")
+        response.raise_for_status()
+        return sorted(m.get("name", "") for m in response.json().get("models", []) if m.get("name"))
+
+    async def test_connection(self) -> dict[str, Any]:
+        started = time.perf_counter()
+        result = await self.check()
+        result["latency_ms"] = round((time.perf_counter() - started) * 1000, 1) if result["ok"] else None
+        result.setdefault("error", None)
+        return result
+
     async def check(self) -> dict[str, Any]:
         """Is Ollama reachable, and is the configured model downloaded?"""
         import httpx  # noqa: PLC0415

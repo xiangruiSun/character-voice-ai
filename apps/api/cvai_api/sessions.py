@@ -26,6 +26,7 @@ from cvai_conversation import (
 )
 from cvai_core.config import AppConfig, load_config
 from cvai_core.errors import CVAIError, VoicePackError
+from cvai_core.interfaces.character import CharacterProvider
 from cvai_core.loaders import (
     FilesystemCharacterProvider,
     open_voicepack,
@@ -128,8 +129,40 @@ class SessionManager:
     ) -> Session:
         character_id = character_id or self.config.default_character
         profile = self._characters.get(character_id)
+        return self._assemble(profile, self._packs_root, characters=self._characters,
+                              session_id=session_id, engine=engine,
+                              enable_barge_in=enable_barge_in)
 
-        paths, manifest = open_voicepack(profile.voice.voicepack_id, self._packs_root)
+    def create_from_parts(
+        self,
+        profile: CharacterProfile,
+        voicepack_root: Path,
+        llm: object,
+        *,
+        checkpoint_id: str | None = None,
+        enable_barge_in: bool = True,
+    ) -> Session:
+        """A session for a character defined elsewhere (the Studio database): its
+        profile, its own voice pack directory, its own LLM and voice checkpoint."""
+        characters = _OverlayCharacters(self._characters, profile)
+        return self._assemble(profile, Path(voicepack_root).parent, characters=characters,
+                              llm=llm, checkpoint_id=checkpoint_id,
+                              enable_barge_in=enable_barge_in)
+
+    def _assemble(
+        self,
+        profile: CharacterProfile,
+        packs_root: Path,
+        *,
+        characters: CharacterProvider,
+        session_id: str | None = None,
+        engine: str | None = None,
+        llm: object | None = None,
+        checkpoint_id: str | None = None,
+        enable_barge_in: bool = True,
+    ) -> Session:
+        character_id = profile.character_id
+        paths, manifest = open_voicepack(profile.voice.voicepack_id, packs_root)
         bank = try_load_reference_bank(paths)
         if bank is None or not bank.samples:
             raise VoicePackError(
@@ -149,11 +182,14 @@ class SessionManager:
             if self.tts_factory
             else build_tts_provider(self.config, engine_name)
         )
-        llm = (
-            self.llm_factory(self.config, None)  # type: ignore[operator]
-            if self.llm_factory
-            else build_llm_provider(self.config)
-        )
+        if checkpoint_id and hasattr(tts, "default_checkpoint"):
+            tts.default_checkpoint = checkpoint_id
+        if llm is None:
+            llm = (
+                self.llm_factory(self.config, None)  # type: ignore[operator]
+                if self.llm_factory
+                else build_llm_provider(self.config)
+            )
 
         identifier = session_id or f"s-{uuid.uuid4().hex[:10]}"
         orchestrator = ConversationOrchestrator(
@@ -164,7 +200,7 @@ class SessionManager:
                 enable_barge_in=enable_barge_in,
             ),
             profile,
-            planner=CharacterSpeechPlanner(llm, self._characters),
+            planner=CharacterSpeechPlanner(llm, characters),
             tts=tts,
             retriever=retriever,
             normalizer=ChineseTextNormalizer.from_character(profile),
@@ -231,3 +267,19 @@ class SessionManager:
         if not target.is_file():
             raise CVAIError(f"no such audio file: {relative}")
         return target
+
+
+class _OverlayCharacters(CharacterProvider):
+    """One extra profile in front of the filesystem ones (the planner looks up by id)."""
+
+    def __init__(self, base: CharacterProvider, profile: CharacterProfile) -> None:
+        self.base = base
+        self.profile = profile
+
+    def get(self, character_id: str) -> CharacterProfile:
+        if character_id == self.profile.character_id:
+            return self.profile
+        return self.base.get(character_id)
+
+    def list_ids(self) -> list[str]:
+        return sorted({self.profile.character_id, *self.base.list_ids()})

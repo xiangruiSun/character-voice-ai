@@ -63,5 +63,27 @@ class LLMProvider(abc.ABC):
         """
         return {"ok": True, "provider": self.provider}
 
+    async def list_models(self) -> list[str]:
+        """Model names this endpoint offers, for a picker. Empty when it cannot say."""
+        return []
+
+    async def test_connection(self) -> dict[str, Any]:
+        """Prove the configured model answers: ``{"ok", "latency_ms", "error"}``.
+
+        Never raises. The default sends a tiny real request, which is the only test
+        that catches a wrong model name or an expired key; adapters may do cheaper.
+        """
+        import time
+
+        started = time.perf_counter()
+        try:
+            await self.complete(
+                [LLMMessage(role="user", content="ping")], max_output_tokens=16
+            )
+        except Exception as exc:  # noqa: BLE001 - reported, not raised
+            return {"ok": False, "latency_ms": None, "error": str(exc)}
+        return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+                "error": None}
+
     async def aclose(self) -> None:
         return None

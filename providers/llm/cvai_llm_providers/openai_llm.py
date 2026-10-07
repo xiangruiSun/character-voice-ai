@@ -13,7 +13,7 @@ import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-from cvai_core.errors import ProviderUnavailableError
+from cvai_core.errors import GenerationError, ProviderUnavailableError
 from cvai_core.interfaces.llm import LLMProvider
 from cvai_core.registry import LLM_PROVIDERS
 from cvai_types import LLMCapabilities, LLMMessage, LLMResponse, LLMStreamChunk, LLMUsage
@@ -100,6 +100,36 @@ class OpenAILLMProvider(LLMProvider):
             "max_completion_tokens": budget,
         }
 
+    async def test_connection(self) -> dict[str, Any]:
+        """One attempt with a short timeout: a person is waiting on a "Testing…" button.
+
+        The client's automatic retries with backoff suit a conversation, but here they
+        turned a provider's 503 into a minute of silence before any answer.
+        """
+        started = time.perf_counter()
+        try:
+            client = self._client_or_raise().with_options(
+                max_retries=0, timeout=min(self.timeout_s, 30.0))
+            await client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "ping"}],
+                **self._sampling(None, 16),
+            )
+        except Exception as exc:  # noqa: BLE001 - reported, not raised
+            return {"ok": False, "latency_ms": None, "error": str(exc)}
+        return {"ok": True, "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+                "error": None}
+
+    async def list_models(self) -> list[str]:
+        client = self._client_or_raise()
+        page = await client.models.list()
+        return sorted(model.id for model in page.data)
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
+
     @staticmethod
     def _dump(messages: list[LLMMessage]) -> list[dict[str, str]]:
         return [{"role": m.role.value, "content": m.content} for m in messages]
@@ -119,6 +149,13 @@ class OpenAILLMProvider(LLMProvider):
             **self._sampling(temperature, max_output_tokens),
         )
         choice = response.choices[0]
+        if not (choice.message.content or "").strip() and choice.finish_reason == "length":
+            # A thinking model spent the whole budget reasoning; an empty "success"
+            # would be a silent failure.
+            raise GenerationError(
+                f"{self.model!r} used its whole token budget and wrote no answer; "
+                "raise max tokens for this connection"
+            )
         usage = getattr(response, "usage", None)
         return LLMResponse(
             content=choice.message.content or "",

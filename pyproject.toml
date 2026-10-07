@@ -42,6 +42,15 @@ runtime = [
     "openai>=1.30",
     "websockets>=12.0",
 ]
+# Character AI Studio — database, job queue, encrypted secrets, uploads.
+studio = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "celery[redis]>=5.4",
+    "redis>=5",
+    "cryptography>=42",
+    "python-multipart>=0.0.9",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
@@ -55,6 +64,7 @@ cvai-prep = "cvai_voice_preprocessing.cli:main"
 cvai-export = "cvai_voice_training.cli:main"
 cvai-api = "cvai_api.app:main"
 cvai-talk = "cvai_api.talk_cli:main"
+cvai-studio-worker = "cvai_studio.workers.celery_app:main"
 
 [tool.setuptools.packages.find]
 # One distribution, many source roots — keeps the spec's folder separation (§22)
@@ -70,6 +80,7 @@ where = [
     "services/sidecar",
     "services/text_normalizer",
     "services/speech_planner",
+    "services/studio",
     "services/conversation",
     "apps/api",
     "providers/tts",
@@ -90,6 +101,7 @@ pythonpath = [
     "services/sidecar",
     "services/text_normalizer",
     "services/speech_planner",
+    "services/studio",
     "services/conversation",
     "apps/api",
     "providers/tts",

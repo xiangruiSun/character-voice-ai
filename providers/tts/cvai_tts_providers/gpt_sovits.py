@@ -19,6 +19,8 @@ transport; not yet run against a live sidecar. Milestone 3 is where that happens
 
 from __future__ import annotations
 
+import asyncio
+
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,20 @@ from .base import HttpSidecarProvider, TimedCall, derive_seed, finalize_result, 
 
 #: GPT-SoVITS language codes. V1 only ever sends Mandarin.
 _LANG = "zh"
+
+#: One api_v2 server holds one set of weights for everyone. What is loaded, and the
+#: lock that makes "swap weights, then synthesize" atomic, belong to the server — not
+#: to each adapter instance — or two characters' sessions would speak in each other's
+#: voices.
+_SERVER_CHECKPOINT: dict[str, str | None] = {}
+_SERVER_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _server_lock(base_url: str) -> asyncio.Lock:
+    lock = _SERVER_LOCKS.get(base_url)
+    if lock is None:
+        lock = _SERVER_LOCKS[base_url] = asyncio.Lock()
+    return lock
 
 
 @TTS_PROVIDERS.register("gpt_sovits")
@@ -54,10 +70,13 @@ class GPTSoVITSProvider(HttpSidecarProvider):
         parallel_infer: bool = True,
         media_type: str = "wav",
         native_sample_rate: int = 48000,
+        default_checkpoint: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(base_url, **kwargs)
         self.engine_version = engine_version
+        #: Weights for this character's voice, used when a request names none.
+        self.default_checkpoint = default_checkpoint
         self.defaults: dict[str, Any] = {
             "top_k": top_k,
             "top_p": top_p,
@@ -129,6 +148,7 @@ class GPTSoVITSProvider(HttpSidecarProvider):
             "GET", "/set_sovits_weights", params={"weights_path": sovits_weights}
         )
         self.loaded_checkpoint = checkpoint_id
+        _SERVER_CHECKPOINT[self.base_url] = checkpoint_id
 
     async def synthesize(self, request: TTSRequest, output_path: Path) -> TTSResult:
         if request.reference is None:
@@ -136,17 +156,18 @@ class GPTSoVITSProvider(HttpSidecarProvider):
                 "GPT-SoVITS always needs a reference clip: it has no other way to "
                 "express style"
             )
-        if request.checkpoint_id and request.checkpoint_id != self.loaded_checkpoint:
-            await self.load_checkpoint(request.checkpoint_id)
-
+        checkpoint = request.checkpoint_id or self.default_checkpoint
         seed = derive_seed(request, salt=self.engine_version)
         payload = self._build_payload(request, seed)
 
-        with TimedCall() as timer:
-            audio = await self._request("POST", "/tts", json=payload, expect_audio=True)
-            if not audio:
-                raise SynthesisError("GPT-SoVITS returned an empty response body")
-            write_audio_bytes(audio, output_path)
+        async with _server_lock(self.base_url):
+            if checkpoint and checkpoint != _SERVER_CHECKPOINT.get(self.base_url):
+                await self.load_checkpoint(checkpoint)
+            with TimedCall() as timer:
+                audio = await self._request("POST", "/tts", json=payload, expect_audio=True)
+                if not audio:
+                    raise SynthesisError("GPT-SoVITS returned an empty response body")
+                write_audio_bytes(audio, output_path)
 
         return finalize_result(
             request,

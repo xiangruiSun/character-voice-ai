@@ -209,7 +209,7 @@ def test_audio_is_linked_relative_so_the_page_travels(manager, tmp_path):
 def test_audio_outside_the_page_directory_falls_back_to_a_file_url(manager, tmp_path):
     session = manager.create()
     page = render_audition(session, [("neutral", "在吗", ["/elsewhere/a.wav"])], tmp_path)
-    assert "file:///elsewhere/a.wav" in page
+    assert 'src="file:///' in page and 'elsewhere/a.wav"' in page   # Windows adds a drive letter
 
 
 def test_the_page_escapes_what_it_interpolates(manager, tmp_path):
